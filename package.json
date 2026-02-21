@@ -1,0 +1,26 @@
+{
+  "name": "nft-marketplace",
+  "private": true,
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "turbo": "^2.5.6"
+  },
+  "scripts": {
+    "contracts:compile": "npm --workspace packages/contracts run compile",
+    "clean": "rimraf apps/web/.next apps/api/dist",
+    "dev": "npm run clean && turbo run dev",
+    "contracts:test": "npm --workspace packages/contracts run test",
+    "contracts:deploy:local": "npm --workspace packages/contracts run deploy:local",
+    "api:dev": "npm --workspace apps/api run dev",
+    "api:build": "npm --workspace apps/api run build",
+    "api:start": "npm --workspace apps/api run start",
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "web:start": "npm --workspace apps/web run start"
+  }
+}

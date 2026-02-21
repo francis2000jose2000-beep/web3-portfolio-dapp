@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer utilities {
+  .glass-card {
+    @apply border border-white/10 bg-zinc-900/40 backdrop-blur-md transition duration-300 hover:scale-[1.02] hover:border-web3-cyan/25 hover:shadow-neon-cyan;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-50;
+  }
+
+  a {
+    @apply text-web3-cyan hover:opacity-90;
+  }
+}

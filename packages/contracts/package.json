@@ -1,0 +1,26 @@
+{
+  "name": "@nft-marketplace/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "compile": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js compile",
+    "test": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js test",
+    "dev": "npm run node",
+    "node": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js node",
+    "deploy:local": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js run scripts/deploy.ts --network localhost",
+    "deploy:hardhat": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js run scripts/deploy.ts --network hardhat",
+    "deploy:amoy": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js run scripts/deploy.ts --network amoy",
+    "seed:local": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js run scripts/seed.ts --network localhost",
+    "simulate:auction": "npx -p node@20.11.1 node ../../node_modules/hardhat/internal/cli/cli.js run scripts/simulate-bids.ts --network localhost"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
