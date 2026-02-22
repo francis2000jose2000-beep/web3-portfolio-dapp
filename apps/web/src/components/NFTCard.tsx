@@ -31,6 +31,8 @@ type NFTCardProps = {
   priceWei?: bigint;
   priceLabel?: string;
   onPurchased?: () => void;
+  demoActionLabel?: string;
+  onDemoAction?: () => void | Promise<void>;
 };
 
 const FALLBACK_IMAGE =
@@ -57,7 +59,9 @@ export function NFTCard({
   sold,
   priceWei,
   priceLabel,
-  onPurchased
+  onPurchased,
+  demoActionLabel,
+  onDemoAction
 }: NFTCardProps) {
   const resolvedUrl = useMemo(() => {
     const candidate = typeof mediaUrl === "string" && mediaUrl.trim() ? mediaUrl.trim() : typeof imageUrl === "string" ? imageUrl.trim() : "";
@@ -246,23 +250,35 @@ export function NFTCard({
                 if (isExternal === true) {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (typeof onDemoAction === "function") {
+                    void onDemoAction();
+                    return;
+                  }
                   const target = typeof externalUrl === "string" && externalUrl.trim() ? externalUrl.trim() : null;
                   if (target) window.open(target, "_blank", "noopener,noreferrer");
                   return;
                 }
                 void handlePurchase();
               }}
-              disabled={isExternal === true ? !externalUrl : !canAttemptBuy || isProcessingPurchase || isSuccess}
+              disabled={
+                isExternal === true
+                  ? typeof onDemoAction === "function"
+                    ? false
+                    : !externalUrl
+                  : !canAttemptBuy || isProcessingPurchase || isSuccess
+              }
             >
               {isProcessingPurchase ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-950/30 border-t-zinc-950" />
                   {purchaseStatusText}
                 </span>
-              ) : isExternal === true ? (externalUrl ? "View on Mainnet" : "View Only") : purchaseStatusText}
+              ) : isExternal === true ? (typeof onDemoAction === "function" ? (demoActionLabel ?? "Buy Now") : externalUrl ? "Mainnet Asset" : "View Only") : purchaseStatusText}
             </button>
           ) : null}
         </div>
+
+
 
         {marketplaceAddress && typeof tokenId === "bigint" && typeof chainId === "number" ? (
           <AuctionBidBox marketplaceAddress={marketplaceAddress} chainId={chainId} tokenId={tokenId} />

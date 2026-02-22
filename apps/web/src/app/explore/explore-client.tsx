@@ -14,6 +14,7 @@ import { NFTCard } from "@/components/NFTCard";
 import { NFTSkeleton } from "@/components/NFTSkeleton";
 import { Title } from "@/components/Title";
 import { CONTRACT_ADDRESS } from "@/config/contracts";
+import { DEMO_MAINNET_NFTS } from "@/lib/constants/mock-nfts";
 import { fetchNFTs, ipfsToGatewayUrl, type NftApiItem } from "@/lib/api";
 
 function getErrorMessage(err: unknown): string {
@@ -122,7 +123,8 @@ export function ExploreClient() {
   });
 
   const enriched = useMemo(() => {
-    const raw = Array.isArray(data) ? data : [];
+    const apiItems = Array.isArray(data) ? data : [];
+    const raw = [...DEMO_MAINNET_NFTS, ...apiItems];
     return raw
       .map((it): (NftApiItem & { tokenIdBig: bigint; priceWeiBig: bigint | null; sellerAddr?: Address; priceEth?: string }) | null => {
         let tokenIdBig: bigint;
@@ -141,7 +143,8 @@ export function ExploreClient() {
           }
         }
 
-        const sellerAddr = typeof it.seller === "string" && isAddress(it.seller) ? (it.seller as Address) : undefined;
+        const sellerValue = (it as unknown as { seller?: string }).seller;
+        const sellerAddr = typeof sellerValue === "string" && isAddress(sellerValue) ? (sellerValue as Address) : undefined;
         const priceEth = typeof priceWeiBig === "bigint" ? formatEther(priceWeiBig) : typeof it.price === "string" ? it.price : undefined;
         return { ...it, tokenIdBig, priceWeiBig, sellerAddr, priceEth };
       })
@@ -160,6 +163,9 @@ export function ExploreClient() {
         item.tokenId.toString().includes(query) ||
         (item.sellerAddr ? item.sellerAddr.toLowerCase().includes(query) : false) ||
         (item.owner ? item.owner.toLowerCase().includes(query) : false) ||
+        (typeof (item as unknown as { collection?: string }).collection === "string"
+          ? (item as unknown as { collection: string }).collection.toLowerCase().includes(query)
+          : false) ||
         (item.name ? item.name.toLowerCase().includes(query) : false) ||
         (item.description ? item.description.toLowerCase().includes(query) : false);
 
@@ -275,12 +281,12 @@ export function ExploreClient() {
         ) : null}
 
         {isError ? (
-          <div className="mt-8 rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
-            Error loading NFTs from API: {getErrorMessage(error)}
+          <div className="mt-8 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-6 text-sm text-yellow-100">
+            Marketplace listings are unavailable right now. Showing demo mainnet assets instead. ({getErrorMessage(error)})
           </div>
         ) : null}
 
-        {isLoading ? (
+        {isLoading && DEMO_MAINNET_NFTS.length === 0 ? (
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <NFTSkeleton key={i} />
@@ -288,56 +294,69 @@ export function ExploreClient() {
           </div>
         ) : null}
 
-        {!isLoading && !isError ? (
-          items.length > 0 ? (
-            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {items.map((item, idx) => (
-                <motion.div
-                  key={item.tokenId}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, ease: "easeOut", delay: idx * 0.045 }}
-                  className="will-change-transform"
-                >
-                  <NFTCard
-                    href={`/nft-details/${item.tokenId}`}
-                    title={item.name?.trim() ? item.name : `Token #${item.tokenId}`}
-                    subtitle={item.sellerAddr ? sellerLabel(item.sellerAddr) : item.category ? `Category: ${item.category}` : undefined}
-                    rightBadge={item.sold ? "Sold" : "Listed"}
-                    mediaUrl={
-                      typeof item.media === "string" && item.media.trim()
-                        ? ipfsToGatewayUrl(item.media)
-                        : typeof item.image === "string" && item.image.trim()
-                          ? ipfsToGatewayUrl(item.image)
+        {items.length > 0 ? (
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {items.map((item, idx) => (
+              <motion.div
+                key={`${item.isExternal ? "external" : "local"}-${item.tokenId}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, ease: "easeOut", delay: idx * 0.045 }}
+                className="will-change-transform"
+              >
+                <NFTCard
+                  href={
+                    item.isExternal
+                      ? typeof (item as unknown as { id?: string }).id === "string"
+                        ? `/nft-details/${(item as unknown as { id: string }).id}`
+                        : undefined
+                      : `/nft-details/${item.tokenId}`
+                  }
+                  title={item.name?.trim() ? item.name : `Token #${item.tokenId}`}
+                  subtitle={
+                    item.isExternal
+                      ? typeof (item as unknown as { collection?: string }).collection === "string"
+                        ? (item as unknown as { collection: string }).collection
+                        : "Mainnet Asset"
+                      : item.sellerAddr
+                        ? sellerLabel(item.sellerAddr)
+                        : item.category
+                          ? `Category: ${item.category}`
                           : undefined
-                    }
-                    type={item.type}
-                    mediaType={item.mediaType}
-                    mimeType={item.mimeType}
-                    isExternal={item.isExternal}
-                    externalUrl={item.externalUrl}
-                    marketplaceAddress={contractAddress}
-                    chainId={chainId}
-                    tokenId={item.isExternal ? undefined : item.tokenIdBig}
-                    seller={item.isExternal ? undefined : item.sellerAddr}
-                    sold={item.sold}
-                    priceWei={item.isExternal ? undefined : (item.priceWeiBig ?? undefined)}
-                    priceLabel={item.isExternal ? (item.priceEth ? `${item.priceEth} ETH` : undefined) : undefined}
-                    onPurchased={() => {
-                      void refetch();
-                    }}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-10">
-              <EmptyState message="NO ASSETS DETECTED IN THIS SECTOR." />
-            </div>
-          )
-        ) : null}
+                  }
+                  rightBadge={item.isExternal ? "Mainnet" : item.sold ? "Sold" : "Listed"}
+                  mediaUrl={
+                    typeof item.media === "string" && item.media.trim()
+                      ? ipfsToGatewayUrl(item.media)
+                      : typeof item.image === "string" && item.image.trim()
+                        ? ipfsToGatewayUrl(item.image)
+                        : undefined
+                  }
+                  type={item.type}
+                  mediaType={item.mediaType}
+                  mimeType={item.mimeType}
+                  isExternal={item.isExternal}
+                  externalUrl={item.externalUrl}
+                  marketplaceAddress={contractAddress}
+                  chainId={chainId}
+                  tokenId={item.isExternal ? undefined : item.tokenIdBig}
+                  seller={item.isExternal ? undefined : item.sellerAddr}
+                  sold={item.sold}
+                  priceWei={item.isExternal ? undefined : (item.priceWeiBig ?? undefined)}
+                  priceLabel={item.isExternal ? (item.priceEth ? `${item.priceEth} ETH` : undefined) : undefined}
+                  onPurchased={() => {
+                    void refetch();
+                  }}
+                />
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-10">
+            <EmptyState message="NO ASSETS DETECTED IN THIS SECTOR." />
+          </div>
+        )}
       </div>
     </Mounted>
   );
 }
-

@@ -6,7 +6,7 @@ import { ArrowLeft, ExternalLink, Repeat2, ShoppingCart, Sparkles, Tag } from "l
 import { hardhat } from "viem/chains";
 import { formatEther, type Address } from "viem";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useAccount, useReadContract, useSignMessage, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { toast } from "sonner";
 import { Mounted } from "@/components/Mounted";
 import { Title } from "@/components/Title";
@@ -14,6 +14,7 @@ import { AuctionBidBox } from "@/components/AuctionBidBox";
 import { CONTRACT_ADDRESS, marketplaceAbi } from "@/config/contracts";
 import { fetchNFTByTokenId, fetchTokenActivity, ipfsToGatewayUrl, swapToIpfsFallbackGateway, type ActivityItem } from "@/lib/api";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
+import { getDemoMainnetNftById, type DemoActivityItem } from "@/lib/constants/mock-nfts";
 
 type MarketItem = {
   itemId: bigint;
@@ -70,34 +71,40 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
     </div>
   );
 
+  const demo = useMemo(() => getDemoMainnetNftById(id), [id]);
+  const isDemo = demo !== null;
+
   const tokenId = useMemo(() => {
+    if (isDemo) return null;
     try {
       return BigInt(id);
     } catch {
       return null;
     }
-  }, [id]);
+  }, [id, isDemo]);
 
   const chainIdRaw = process.env.NEXT_PUBLIC_CHAIN_ID ?? "";
   const chainId = chainIdRaw ? Number(chainIdRaw) : hardhat.id;
   const contractAddress = isAddress(CONTRACT_ADDRESS) ? (CONTRACT_ADDRESS as Address) : undefined;
 
   const { isConnected, address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [buyToastId, setBuyToastId] = useState<ToastId | null>(null);
+  const [bidEth, setBidEth] = useState<string>("");
 
   const { data: nftDoc, isLoading: isMetaLoading } = useQuery({
     queryKey: ["nft", id],
     queryFn: () => fetchNFTByTokenId(id),
-    enabled: tokenId !== null,
+    enabled: !isDemo && tokenId !== null,
     staleTime: 15_000
   });
 
-  const isExternal = nftDoc?.isExternal === true;
+  const isExternal = isDemo ? true : nftDoc?.isExternal === true;
 
   const { data: history } = useQuery({
     queryKey: ["activity", { tokenId: id }],
     queryFn: () => fetchTokenActivity(id, { limit: 50 }),
-    enabled: tokenId !== null,
+    enabled: !isDemo && tokenId !== null,
     staleTime: 5_000
   });
 
@@ -113,9 +120,11 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
   });
 
   const owner = isExternal
-    ? typeof nftDoc?.owner === "string" && isAddress(nftDoc.owner)
-      ? nftDoc.owner
-      : null
+    ? isDemo
+      ? demo.ownerAddress
+      : typeof nftDoc?.owner === "string" && isAddress(nftDoc.owner)
+        ? nftDoc.owner
+        : null
     : typeof ownerData === "string" && isAddress(ownerData)
       ? ownerData
       : null;
@@ -138,19 +147,37 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
   }, [isExternal, itemsData, tokenId]);
 
   const priceLabel = isExternal
-    ? typeof nftDoc?.price === "string" && nftDoc.price.trim()
-      ? nftDoc.price.trim()
-      : null
+    ? isDemo
+      ? demo.isAuction === true
+        ? `${demo.highestBid ?? demo.minBid ?? demo.priceEth} ETH`
+        : `${demo.priceEth} ETH`
+      : typeof nftDoc?.price === "string" && nftDoc.price.trim()
+        ? nftDoc.price.trim()
+        : null
     : listing
       ? `${formatEther(listing.price)} ETH`
       : null;
-  const authorAddress = (isExternal ? (typeof nftDoc?.seller === "string" && isAddress(nftDoc.seller) ? nftDoc.seller : null) : listing?.seller) ?? owner ?? null;
 
-  const displayName = nftDoc?.name?.trim() ? nftDoc.name.trim() : `Token #${id}`;
-  const displayDescription = nftDoc?.description?.trim() ? nftDoc.description.trim() : null;
-  const displayImage = typeof nftDoc?.image === "string" && nftDoc.image.trim() ? ipfsToGatewayUrl(nftDoc.image.trim()) : null;
-  const displayMediaRaw =
-    typeof nftDoc?.media === "string" && nftDoc.media.trim()
+  const authorAddress =
+    (isExternal
+      ? isDemo
+        ? (demo.creatorAddress as Address)
+        : typeof nftDoc?.seller === "string" && isAddress(nftDoc.seller)
+          ? nftDoc.seller
+          : null
+      : listing?.seller) ?? owner ?? null;
+
+  const displayName = isDemo ? demo.name : nftDoc?.name?.trim() ? nftDoc.name.trim() : `Token #${id}`;
+  const displayCollection = isDemo ? demo.collection : null;
+  const displayDescription = isDemo ? demo.description : nftDoc?.description?.trim() ? nftDoc.description.trim() : null;
+  const displayImage = isDemo
+    ? ipfsToGatewayUrl(demo.image)
+    : typeof nftDoc?.image === "string" && nftDoc.image.trim()
+      ? ipfsToGatewayUrl(nftDoc.image.trim())
+      : null;
+  const displayMediaRaw = isDemo
+    ? demo.image
+    : typeof nftDoc?.media === "string" && nftDoc.media.trim()
       ? nftDoc.media.trim()
       : typeof nftDoc?.image === "string" && nftDoc.image.trim()
         ? nftDoc.image.trim()
@@ -158,11 +185,13 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
   const displayMedia = displayMediaRaw ? ipfsToGatewayUrl(displayMediaRaw) : null;
   const displayMediaType = (() => {
     const mt =
-      typeof nftDoc?.type === "string" && nftDoc.type.trim()
-        ? nftDoc.type.toLowerCase()
-        : typeof nftDoc?.mediaType === "string"
-          ? nftDoc.mediaType.toLowerCase()
-          : "";
+      isDemo
+        ? "image"
+        : typeof nftDoc?.type === "string" && nftDoc.type.trim()
+          ? nftDoc.type.toLowerCase()
+          : typeof nftDoc?.mediaType === "string"
+            ? nftDoc.mediaType.toLowerCase()
+            : "";
     if (mt === "audio" || mt === "video" || mt === "image") return mt;
     const mime = typeof nftDoc?.mimeType === "string" ? nftDoc.mimeType.toLowerCase() : "";
     if (mime.startsWith("audio/")) return "audio";
@@ -220,6 +249,38 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
   const sellerLower = listing ? listing.seller.toLowerCase() : "";
 
   const canBuy = !isExternal && Boolean(contractAddress) && Boolean(listing) && isConnected && accountLower !== "" && accountLower !== sellerLower;
+
+  const isDemoOwner =
+    isDemo && typeof address === "string" ? address.toLowerCase() === demo.ownerAddress.toLowerCase() : false;
+  const isDemoAuction = isDemo ? demo.isAuction === true : false;
+
+  useEffect(() => {
+    if (!isDemo) return;
+    const seed = demo.highestBid ?? demo.minBid ?? "";
+    setBidEth(seed);
+  }, [isDemo, demo]);
+
+  const simulateDemoAction = async (payload: { action: "Buy" | "Sell" | "Bid"; amountEth?: string }): Promise<void> => {
+    if (!isDemo) return;
+    try {
+      if (!isConnected) {
+        toast.warning("Connect wallet to simulate transaction");
+        return;
+      }
+
+      const msg =
+        payload.action === "Bid"
+          ? `Portfolio Demo: I want to place a bid of ${payload.amountEth ?? "0"} ETH on ${demo.name} (${demo.collection}).\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`
+          : `Portfolio Demo: I want to ${payload.action.toLowerCase()} ${demo.name} (${demo.collection}) for ${demo.priceEth} ETH.\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`;
+
+      const toastId = toast.loading("Awaiting signature…");
+      await signMessageAsync({ message: msg });
+      toast.success("Portfolio Demo: Simulated transaction successful", { id: toastId });
+    } catch (err: unknown) {
+      if (isUserRejectedError(err)) toast.warning("Signature cancelled.");
+      else toast.error(getErrorMessage(err));
+    }
+  };
 
   const handleBuy = async (): Promise<void> => {
     if (!listing || !contractAddress || tokenId === null) return;
@@ -301,7 +362,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
     return `${base}/token/${ca}?a=${tokenId.toString()}`;
   }, [isExternal, nftDoc?.chainId, nftDoc?.contractAddress, nftDoc?.externalUrl, contractAddress, tokenId, chainId]);
 
-  if (tokenId === null) {
+  if (!isDemo && tokenId === null) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-zinc-200">
         Invalid token id.
@@ -345,7 +406,15 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
           <Title
             eyebrow="NFT"
             title={displayName}
-            subtitle={listing ? "Listed on the marketplace" : "Not currently listed"}
+            subtitle={
+              isDemo
+                ? isDemoAuction
+                  ? "Auction demo listing"
+                  : "Mainnet demo asset"
+                : listing
+                  ? "Listed on the marketplace"
+                  : "Not currently listed"
+            }
           />
         )}
 
@@ -411,7 +480,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Contract</div>
                   <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-100">
-                    {isExternal ? (nftDoc?.contractAddress ?? "—") : (contractAddress ?? "—")}
+                    {isExternal ? (isDemo ? demo.contractAddress : (nftDoc?.contractAddress ?? "—")) : (contractAddress ?? "—")}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
@@ -420,13 +489,27 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                     {owner ? truncateAddress(owner) : "—"}
                   </div>
                 </div>
+                {displayCollection ? (
+                  <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
+                    <div className="text-xs text-zinc-500">Collection</div>
+                    <div className="mt-1 truncate text-xs font-semibold text-zinc-100">{displayCollection}</div>
+                  </div>
+                ) : null}
+                {isDemo ? (
+                  <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
+                    <div className="text-xs text-zinc-500">Creator</div>
+                    <div className="mt-1 font-mono text-xs font-semibold text-zinc-100">{truncateAddress(demo.creatorAddress)}</div>
+                  </div>
+                ) : null}
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Seller</div>
                   <div className="mt-1 font-mono text-xs font-semibold text-zinc-100">
                     {isExternal
-                      ? typeof nftDoc?.seller === "string" && isAddress(nftDoc.seller)
-                        ? truncateAddress(nftDoc.seller)
-                        : "—"
+                      ? isDemo
+                        ? "—"
+                        : typeof nftDoc?.seller === "string" && isAddress(nftDoc.seller)
+                          ? truncateAddress(nftDoc.seller)
+                          : "—"
                       : listing
                         ? truncateAddress(listing.seller)
                         : "—"}
@@ -440,21 +523,68 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
             </section>
 
             <section className="rounded-3xl glass-card p-6 shadow-glow">
-              {auctionPanel}
+              {!isDemo ? auctionPanel : null}
               <div className="flex flex-col gap-3">
+                {isDemo && isDemoAuction ? (
+                  <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
+                    <div className="text-xs text-zinc-500">Bid amount (ETH)</div>
+                    <input
+                      value={bidEth}
+                      onChange={(e) => setBidEth(e.target.value)}
+                      inputMode="decimal"
+                      placeholder={demo.minBid ?? "0"}
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-100 outline-none"
+                    />
+                    <div className="mt-2 text-xs text-zinc-400">
+                      Min bid: {demo.minBid ?? "—"} ETH · Highest bid: {demo.highestBid ?? "—"} ETH
+                    </div>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
+                    if (isDemo) {
+                      if (isDemoAuction) {
+                        void simulateDemoAction({ action: "Bid", amountEth: bidEth });
+                        return;
+                      }
+                      void simulateDemoAction({ action: isDemoOwner ? "Sell" : "Buy" });
+                      return;
+                    }
+
                     if (isExternal) {
                       if (explorerUrl) window.open(explorerUrl, "_blank", "noopener,noreferrer");
                       return;
                     }
+
                     void handleBuy();
                   }}
-                  disabled={isExternal ? !explorerUrl : !canBuy || isBusy || isSuccess}
+                  disabled={isDemo ? false : isExternal ? !explorerUrl : !canBuy || isBusy || isSuccess}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-web3-cyan px-5 py-3 text-sm font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isExternal ? (explorerUrl ? "View on Mainnet" : "View Only") : isBusy ? "Processing…" : isSuccess ? "Purchased" : isConnected ? "Buy now" : "Connect wallet to buy"}
+                  {isDemo
+                    ? isDemoAuction
+                      ? isConnected
+                        ? "Place Bid"
+                        : "Connect wallet to bid"
+                      : isDemoOwner
+                        ? isConnected
+                          ? "Sell"
+                          : "Connect wallet to sell"
+                        : isConnected
+                          ? "Buy Now"
+                          : "Connect wallet to buy"
+                    : isExternal
+                      ? explorerUrl
+                        ? "View on Mainnet"
+                        : "View Only"
+                      : isBusy
+                        ? "Processing…"
+                        : isSuccess
+                          ? "Purchased"
+                          : isConnected
+                            ? "Buy now"
+                            : "Connect wallet to buy"}
                 </button>
 
                 {explorerUrl ? (
@@ -474,45 +604,64 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                 {txHash ? <p className="break-all font-mono text-xs text-zinc-400">{txHash}</p> : null}
               </div>
             </section>
-
-            <section className="rounded-3xl glass-card p-6 shadow-glow">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-zinc-100">Transaction History</div>
-                <div className="text-xs text-zinc-400">{Array.isArray(history) ? `${history.length} event(s)` : "—"}</div>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {Array.isArray(history) && history.length > 0 ? (
-                  history.map((it) => (
-                    <div
-                      key={it.eventId}
-                      className="flex items-start gap-3 rounded-2xl border border-white/10 bg-zinc-950/30 p-4"
-                    >
-                      <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5">
-                        {activityIcon(it)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <div className="text-sm font-semibold text-zinc-100">{activityLabel(it)}</div>
-                          <div className="text-xs text-zinc-400">Token #{it.tokenId}</div>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-500">{formatWhen(it.timestamp)}</div>
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
-                          {it.from ? <span>From {truncateAddress(it.from)}</span> : null}
-                          {it.to ? <span>To {truncateAddress(it.to)}</span> : null}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4 text-sm text-zinc-200">
-                    No on-chain events indexed for this token yet.
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
         </div>
+
+        <section className="rounded-3xl glass-card p-6 shadow-glow">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-zinc-100">Activity</div>
+            <div className="text-xs text-zinc-400">
+              {isDemo
+                ? `${demo.activity.length} event(s)`
+                : Array.isArray(history)
+                  ? `${history.length} event(s)`
+                  : "—"}
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="text-xs text-zinc-400">
+                  <th className="py-2 pr-4">Type</th>
+                  <th className="py-2 pr-4">From</th>
+                  <th className="py-2 pr-4">To</th>
+                  <th className="py-2 pr-4">Amount</th>
+                  <th className="py-2">When</th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-200">
+                {isDemo
+                  ? demo.activity.map((it: DemoActivityItem) => (
+                      <tr key={it.id} className="border-t border-white/10">
+                        <td className="py-3 pr-4 font-semibold text-zinc-100">{it.type}</td>
+                        <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "—"}</td>
+                        <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "—"}</td>
+                        <td className="py-3 pr-4">{it.amountEth ? `${it.amountEth} ETH` : "—"}</td>
+                        <td className="py-3 text-xs text-zinc-400">{formatWhen(it.timestamp)}</td>
+                      </tr>
+                    ))
+                  : Array.isArray(history) && history.length > 0
+                    ? history.map((it) => (
+                        <tr key={it.eventId} className="border-t border-white/10">
+                          <td className="py-3 pr-4 font-semibold text-zinc-100">{activityLabel(it)}</td>
+                          <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "—"}</td>
+                          <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "—"}</td>
+                          <td className="py-3 pr-4">{it.price ? `${it.price} ETH` : "—"}</td>
+                          <td className="py-3 text-xs text-zinc-400">{formatWhen(it.timestamp)}</td>
+                        </tr>
+                      ))
+                    : (
+                        <tr className="border-t border-white/10">
+                          <td colSpan={5} className="py-4 text-sm text-zinc-200">
+                            No activity available for this token yet.
+                          </td>
+                        </tr>
+                      )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </Mounted>
   );
