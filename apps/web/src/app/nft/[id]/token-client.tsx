@@ -195,7 +195,7 @@ export function NftPageClient({ id }: NftPageClientProps) {
   }, [resolved.tokenId]);
 
   // Wagmi Hooks for Live Data
-  const { data: onChainOwner } = useReadContract({
+  const { data: onChainOwner, isFetching: isFetchingOwner } = useReadContract({
     address: resolved.contractAddress as `0x${string}`,
     abi: erc721Abi, // Use standard ERC721 ABI for ownerOf to support external contracts
     functionName: "ownerOf",
@@ -205,7 +205,7 @@ export function NftPageClient({ id }: NftPageClientProps) {
     }
   });
 
-  const { data: marketItems } = useReadContract({
+  const { data: marketItems, isFetching: isFetchingMarket } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: marketplaceAbi,
     functionName: "fetchMarketItems",
@@ -213,6 +213,8 @@ export function NftPageClient({ id }: NftPageClientProps) {
       enabled: !!resolved.contractAddress && !resolved.isExternal // Only check local market items for non-external
     }
   });
+
+  const isVerifying = isFetchingOwner || isFetchingMarket;
 
   // Determine listing status and price
   const listingData = useMemo(() => {
@@ -228,7 +230,30 @@ export function NftPageClient({ id }: NftPageClientProps) {
     };
   }, [marketItems, safeTokenId, resolved.isExternal]);
 
-  const displayOwner = onChainOwner ?? resolved.owner;
+  const displayOwner = useMemo(() => {
+    if (onChainOwner) return onChainOwner;
+    return resolved.owner;
+  }, [onChainOwner, resolved.owner]);
+
+  const isOwner = useMemo(() => {
+    if (!myAddress || !displayOwner) return false;
+    return myAddress.toLowerCase() === displayOwner.toLowerCase();
+  }, [myAddress, displayOwner]);
+
+  const isListed = useMemo(() => {
+    if (!listingData) return false;
+    return listingData.price > BigInt(0);
+  }, [listingData]);
+
+  useEffect(() => {
+    console.table({
+      onChainOwner,
+      address: myAddress,
+      isOwner,
+      price: listingData?.price,
+      displayOwner
+    });
+  }, [onChainOwner, myAddress, isOwner, listingData, displayOwner]);
 
   const displayPrice = useMemo(() => {
     if (resolved.isExternal) return resolved.price;
@@ -278,8 +303,6 @@ export function NftPageClient({ id }: NftPageClientProps) {
       value: listingData.price
     });
   };
-
-  const isBuyable = !!listingData && listingData.seller !== myAddress;
 
   const traits = useMemo((): Array<{ traitType: string; value: string }> => {
     const attrs = resolved.attributes;
@@ -412,16 +435,16 @@ export function NftPageClient({ id }: NftPageClientProps) {
 
         <Title eyebrow={chainLabel} title={resolved.name} subtitle={resolved.collection} />
 
-        <div className="grid gap-8 lg:grid-cols-2">
+        <div className="grid gap-8 lg:grid-cols-2 items-start">
           <div className="relative overflow-hidden rounded-3xl glass-card shadow-glow">
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.14),transparent_55%),radial-gradient(circle_at_80%_70%,rgba(167,139,250,0.14),transparent_55%)] blur-xl" />
-            <div className="aspect-square">
+            <div className={isLoading || resolved.mediaType === "audio" ? "aspect-square" : "w-full"}>
               {isLoading ? (
                 <div className="h-full w-full animate-pulse bg-white/10" />
               ) : resolved.mediaType === "video" ? (
                 <video
                   src={mediaSrc}
-                  className="h-full w-full object-cover"
+                  className="w-full h-auto"
                   autoPlay
                   muted
                   playsInline
@@ -447,7 +470,7 @@ export function NftPageClient({ id }: NftPageClientProps) {
                 <img
                   src={mediaSrc}
                   alt={resolved.name}
-                  className="h-full w-full object-cover"
+                  className="w-full h-auto object-contain"
                   loading="lazy"
                   onError={handleMediaError}
                 />
@@ -476,8 +499,14 @@ export function NftPageClient({ id }: NftPageClientProps) {
                   <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-100">{resolved.collection}</div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
-                  <div className="text-xs text-zinc-500">Owner</div>
-                  <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-100">{shortenAddress(displayOwner)}</div>
+                  <div className="text-xs text-zinc-500">
+                    {isFetchingOwner ? "Owner" : onChainOwner ? "Owner" : "Last Known Owner"}
+                  </div>
+                  {isFetchingOwner ? (
+                    <div className="mt-1 h-4 w-20 animate-pulse rounded bg-white/10" />
+                  ) : (
+                    <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-100">{shortenAddress(displayOwner)}</div>
+                  )}
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Contract</div>
@@ -485,10 +514,14 @@ export function NftPageClient({ id }: NftPageClientProps) {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">{priceLabel}</div>
-                  <div className="mt-1 inline-flex items-baseline gap-1 text-sm font-semibold tabular-nums text-web3-cyan">
-                    <span>{price.value}</span>
-                    {price.showUnit ? <span className="text-xs font-semibold text-web3-cyan/70">ETH</span> : null}
-                  </div>
+                  {isVerifying ? (
+                    <div className="mt-1 h-5 w-24 animate-pulse rounded bg-white/10" />
+                  ) : (
+                    <div className="mt-1 inline-flex items-baseline gap-1 text-sm font-semibold tabular-nums text-web3-cyan">
+                      <span>{price.value}</span>
+                      {price.showUnit ? <span className="text-xs font-semibold text-web3-cyan/70">ETH</span> : null}
+                    </div>
+                  )}
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Type</div>
@@ -506,24 +539,59 @@ export function NftPageClient({ id }: NftPageClientProps) {
                 ) : null}
               </div>
 
-              {isBuyable && !price.isEstimate && (
-                <div className="mt-6">
-                  <button
-                    onClick={handleBuy}
-                    disabled={isWriting || isConfirming}
-                    className="w-full rounded-xl bg-web3-primary px-6 py-3 text-sm font-bold text-white transition hover:bg-web3-primary/90 disabled:opacity-50"
-                  >
-                    {isWriting || isConfirming ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Processing...</span>
-                      </div>
-                    ) : (
-                      "Buy Now"
-                    )}
+              <div className="mt-6">
+                {isVerifying ? (
+                  <button disabled className="w-full rounded-xl bg-white/5 px-6 py-3 text-sm font-bold text-white opacity-50 flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Verifying on-chain...</span>
                   </button>
-                </div>
-              )}
+                ) : isOwner ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => toast.info("Listing functionality coming soon")}
+                      className="w-full rounded-xl bg-web3-primary px-6 py-3 text-sm font-bold text-white transition hover:bg-web3-primary/90"
+                    >
+                      List for Sale
+                    </button>
+                    <button
+                      onClick={() => toast.info("Transfer functionality coming soon")}
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-zinc-100 transition hover:bg-white/10"
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                ) : isListed ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={handleBuy}
+                      disabled={isWriting || isConfirming}
+                      className="w-full rounded-xl bg-web3-primary px-6 py-3 text-sm font-bold text-white transition hover:bg-web3-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isWriting || isConfirming ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        "Buy Now"
+                      )}
+                    </button>
+                    <button
+                      onClick={() => toast.info("Bidding functionality coming soon")}
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-zinc-100 transition hover:bg-white/10"
+                    >
+                      Place Bid
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => toast.info("Offer functionality coming soon")}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-zinc-100 transition hover:bg-white/10"
+                  >
+                    Make an Offer
+                  </button>
+                )}
+              </div>
             </section>
 
             {/* Transaction History Section */}

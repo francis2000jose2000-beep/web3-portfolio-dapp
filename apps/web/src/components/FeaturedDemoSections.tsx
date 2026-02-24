@@ -56,7 +56,7 @@ export function FeaturedDemoSections({ nfts }: FeaturedDemoSectionsProps) {
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 items-start">
           {featuredDrop.map((nft) => {
             const canSell = typeof address === "string" && address.toLowerCase() === nft.ownerAddress.toLowerCase();
             return (

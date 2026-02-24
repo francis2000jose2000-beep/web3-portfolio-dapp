@@ -272,11 +272,11 @@ export function NFTCard({
 
   const content = (
     <>
-      <div className="relative aspect-square">
+      <div className={resolvedType === "audio" ? "relative aspect-square" : "relative w-full"}>
         {resolvedType === "video" && resolvedUrl ? (
           <video
             src={resolvedUrl}
-            className="h-full w-full object-cover"
+            className="w-full h-auto"
             muted
             autoPlay
             loop
@@ -305,7 +305,7 @@ export function NFTCard({
           <img
             src={src}
             alt={title}
-            className="h-full w-full object-cover"
+            className="w-full h-auto object-contain"
             loading="lazy"
             onError={handleImageError}
             style={shouldPixelate ? { imageRendering: "pixelated" } : undefined}
@@ -386,9 +386,9 @@ export function NFTCard({
       whileHover={{ y: -6 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 350, damping: 26 }}
-      className="group relative overflow-hidden rounded-xl"
+      className="group relative h-full overflow-hidden rounded-xl"
     >
-      <div className="relative overflow-hidden rounded-xl glass-card shadow-glow transition-colors group-hover:bg-zinc-900/50">
+      <div className="relative h-full flex flex-col overflow-hidden rounded-xl glass-card shadow-glow transition-colors group-hover:bg-zinc-900/50">
         {content}
       </div>
     </motion.div>
@@ -396,11 +396,11 @@ export function NFTCard({
 
   if (href) {
     return (
-      <Link href={href} className="block transform-gpu transition-transform duration-300 hover:scale-[1.02]">
+      <Link href={href} className="block h-full transform-gpu transition-transform duration-300 hover:scale-[1.02]">
         {cardInner}
       </Link>
     );
   }
 
-  return <div className="block transform-gpu transition-transform duration-300 hover:scale-[1.02]">{cardInner}</div>;
+  return <div className="block h-full transform-gpu transition-transform duration-300 hover:scale-[1.02]">{cardInner}</div>;
 }

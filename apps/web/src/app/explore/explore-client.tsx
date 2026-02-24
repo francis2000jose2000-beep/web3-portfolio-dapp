@@ -722,7 +722,7 @@ export function ExploreClient() {
                         });
 
                         return (
-                          <div key={reactKey} className="will-change-transform">
+                          <div key={reactKey} className="will-change-transform h-full">
                             <NFTCard
                               nft={item}
                               href={rawId ? `/nft/${rawId}` : undefined}
