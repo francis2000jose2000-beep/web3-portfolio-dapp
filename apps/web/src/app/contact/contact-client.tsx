@@ -74,7 +74,7 @@ export function ContactClient() {
         <Title
           eyebrow="Support"
           title="Contact"
-          subtitle="Send a message. Replies are async—yet fast."
+          subtitle="Send a message. Replies are async, yet fast."
           right={
             <Link
               href="/about"
@@ -100,7 +100,7 @@ export function ContactClient() {
             <div className="mt-6 space-y-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
                 <div className="text-xs font-semibold text-zinc-200">Typical response time</div>
-                <div className="mt-1 text-sm text-zinc-300">24–72 hours (demo)</div>
+                  <div className="mt-1 text-sm text-zinc-300">24-72 hours (demo)</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
                 <div className="text-xs font-semibold text-zinc-200">Recommended subject</div>
@@ -162,7 +162,7 @@ export function ContactClient() {
                   value={form.message}
                   onChange={(e) => setForm((s) => ({ ...s, message: e.target.value }))}
                   className="mt-2 min-h-32 w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-web3-cyan/60 focus:shadow-glow"
-                  placeholder="Tell us what you need…"
+                  placeholder="Tell us what you need..."
                 />
               </div>
 
@@ -178,7 +178,7 @@ export function ContactClient() {
                 disabled={mutation.isPending}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-web3-cyan px-5 py-3 text-sm font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {mutation.isPending ? "Sending…" : "Send message"}
+                {mutation.isPending ? "Sending..." : "Send message"}
                 <SendHorizonal className="h-4 w-4" />
               </button>
             </div>

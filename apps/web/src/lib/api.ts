@@ -1,12 +1,16 @@
 export type NftApiItem = {
+  _id?: string;
   tokenId: string;
   itemId?: string;
   seller?: string;
   owner?: string;
   price?: string;
+  priceWei?: string;
+  priceEth?: string;
   sold: boolean;
   name: string;
   description?: string;
+  attributes?: unknown[];
   image?: string;
   media?: string;
   type?: "image" | "audio" | "video";
@@ -17,6 +21,7 @@ export type NftApiItem = {
   contractAddress?: string;
   chainId?: number;
   externalUrl?: string;
+  viewCount?: number;
   createdAt?: string;
   updatedAt?: string;
   isAuction?: boolean;
@@ -24,6 +29,15 @@ export type NftApiItem = {
   highestBid?: string;
   highestBidder?: string;
   auctionEndTime?: string;
+  floorPrice?: number;
+  lastSale?: number;
+};
+
+export type RefreshPricesResult = {
+  scanned: number;
+  updated: number;
+  contractsUpdated: number;
+  fetchedAt: string;
 };
 
 export type EventApiItem = {
@@ -42,9 +56,50 @@ export type FetchNftsParams = {
   owner?: string;
   seller?: string;
   creator?: string;
+  contract?: string;
+  collections?: string;
+  chain?: string;
+  minPrice?: string;
+  maxPrice?: string;
   sold?: boolean;
-  sort?: "newest" | "oldest" | "price_asc" | "price_desc";
+  sort?: "newest" | "oldest" | "price_asc" | "price_desc" | "name_asc";
   limit?: number;
+  page?: number;
+};
+
+export type FetchNftsPageResult = {
+  items: NftApiItem[];
+  total: number;
+};
+
+export type IndexedCollectionApiItem = {
+  label: string;
+  chainId: number;
+  contractAddress: string;
+};
+
+export type CollectionMetadataApiItem = {
+  address: string;
+  name: string | null;
+  symbol: string | null;
+  tokenType: string | null;
+  floorPriceEth: number | null;
+  totalSupply: string | null;
+  volumeEth: number | null;
+  fetchedAt: string;
+};
+
+export type CollectionNftCardApiItem = {
+  tokenId: string;
+  name: string;
+  image: string | null;
+  dbId: string | null;
+};
+
+export type CollectionNftsApiItem = {
+  address: string;
+  items: CollectionNftCardApiItem[];
+  fetchedAt: string;
 };
 
 export type AuthorProfile = {
@@ -203,8 +258,7 @@ export function swapToIpfsFallbackGateway(url: string): string | null {
 }
 
 export function getApiBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL;
-  return (typeof raw === "string" && raw.trim() ? raw.trim() : "http://localhost:3000").replace(/\/$/, "");
+  return "http://localhost:3001";
 }
 
 async function readErrorText(res: Response): Promise<string> {
@@ -216,16 +270,22 @@ async function readErrorText(res: Response): Promise<string> {
   }
 }
 
-export async function fetchNFTs(params: FetchNftsParams = {}): Promise<NftApiItem[]> {
+export async function fetchNFTsPage(params: FetchNftsParams = {}): Promise<FetchNftsPageResult> {
   const url = buildApiUrl("/api/nfts", {
     category: params.category,
     search: params.search,
     owner: params.owner,
     seller: params.seller,
     creator: params.creator,
+    contract: params.contract,
+    collections: params.collections,
+    chain: params.chain,
+    minPrice: params.minPrice,
+    maxPrice: params.maxPrice,
     sold: typeof params.sold === "boolean" ? String(params.sold) : undefined,
     sort: params.sort,
-    limit: typeof params.limit === "number" ? String(params.limit) : undefined
+    limit: typeof params.limit === "number" ? String(params.limit) : undefined,
+    page: typeof params.page === "number" ? String(params.page) : undefined
   });
 
   const res = await fetch(url, {
@@ -240,9 +300,99 @@ export async function fetchNFTs(params: FetchNftsParams = {}): Promise<NftApiIte
     throw new Error(message || `API error (${res.status})`);
   }
 
-  const json = (await res.json()) as unknown as { items?: NftApiItem[] };
+  const json = (await res.json()) as unknown as { items?: NftApiItem[]; total?: number };
+  const items = json && Array.isArray(json.items) ? json.items : [];
+  const total = json && typeof json.total === "number" && Number.isFinite(json.total) ? json.total : items.length;
+  return { items, total };
+}
+
+export async function fetchNFTs(params: FetchNftsParams = {}): Promise<NftApiItem[]> {
+  const page = await fetchNFTsPage(params);
+  return page.items;
+}
+
+export async function fetchIndexedCollections(): Promise<IndexedCollectionApiItem[]> {
+  const url = buildApiUrl("/api/nfts/indexed-collections");
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  const json = (await res.json()) as unknown as { items?: IndexedCollectionApiItem[] };
   if (!json || !Array.isArray(json.items)) return [];
   return json.items;
+}
+
+export async function fetchCollectionMetadata(contractAddress: string): Promise<CollectionMetadataApiItem> {
+  const address = typeof contractAddress === "string" ? contractAddress.trim() : "";
+  if (!address) throw new Error("Missing contract address");
+
+  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/metadata`);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  return (await res.json()) as CollectionMetadataApiItem;
+}
+
+export async function fetchCollectionNfts(contractAddress: string, params: { limit?: number } = {}): Promise<CollectionNftsApiItem> {
+  const address = typeof contractAddress === "string" ? contractAddress.trim() : "";
+  if (!address) throw new Error("Missing contract address");
+
+  const limit = typeof params.limit === "number" && Number.isFinite(params.limit) ? params.limit : undefined;
+  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/nfts`, {
+    limit: typeof limit === "number" ? String(limit) : undefined
+  });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  return (await res.json()) as CollectionNftsApiItem;
+}
+
+export async function fetchNftHistory(contractAddress: string, tokenId: string): Promise<any> {
+  const url = buildApiUrl("/api/nfts/history", {
+    contractAddress,
+    tokenId
+  });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  return await res.json();
 }
 
 export async function fetchNFTByTokenId(tokenId: string): Promise<NftApiItem> {
@@ -262,6 +412,72 @@ export async function fetchNFTByTokenId(tokenId: string): Promise<NftApiItem> {
   const json = (await res.json()) as unknown as { nft?: NftApiItem };
   if (!json || !json.nft) throw new Error("NFT not found");
   return json.nft;
+}
+
+export async function fetchNFTById(id: string): Promise<NftApiItem> {
+  const url = buildApiUrl(`/api/nfts/id/${encodeURIComponent(id)}`);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  const json = (await res.json()) as unknown as { nft?: NftApiItem };
+  if (!json || !json.nft) throw new Error("NFT not found");
+  return json.nft;
+}
+
+export async function trackNftViewById(id: string): Promise<void> {
+  const url = buildApiUrl(`/api/nfts/view/id/${encodeURIComponent(id)}`);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+}
+
+export async function trackNftViewByTokenId(tokenId: string): Promise<void> {
+  const url = buildApiUrl(`/api/nfts/view/token/${encodeURIComponent(tokenId)}`);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+}
+
+export async function refreshPrices(): Promise<RefreshPricesResult> {
+  const url = buildApiUrl("/api/nfts/prices/refresh");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!res.ok) {
+    const message = await readErrorText(res);
+    throw new Error(message || `API error (${res.status})`);
+  }
+
+  return (await res.json()) as RefreshPricesResult;
 }
 
 export async function fetchAuthorProfile(address: string): Promise<AuthorProfile> {

@@ -10,7 +10,7 @@ type ServiceItem = {
 const SERVICES: ServiceItem[] = [
   {
     title: "Filter & Discover",
-    description: "Scan the grid for what’s trending — rarity, price, and vibe.",
+    description: "Scan the grid for what's trending: rarity, price, and vibe.",
     icon: <SlidersHorizontal className="h-5 w-5" />,
     accent: "cyan"
   },
@@ -22,7 +22,7 @@ const SERVICES: ServiceItem[] = [
   },
   {
     title: "Mint NFT",
-    description: "Create your next drop in seconds — metadata now, upgrades later.",
+    description: "Create your next drop in seconds: metadata now, upgrades later.",
     icon: <Sparkles className="h-5 w-5" />,
     accent: "cyan"
   },
@@ -48,7 +48,7 @@ export function Service() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-zinc-50">How it works</h2>
-            <p className="mt-2 text-sm text-zinc-300">A clean path from discovery to sale — with neon energy.</p>
+            <p className="mt-2 text-sm text-zinc-300">A clean path from discovery to sale - with neon energy.</p>
           </div>
           <div className="rounded-full border border-white/10 bg-zinc-950/40 px-4 py-2 text-xs font-semibold text-zinc-200">
             4 simple steps
@@ -84,4 +84,3 @@ export function Service() {
     </section>
   );
 }
-

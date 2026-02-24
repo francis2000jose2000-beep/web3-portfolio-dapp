@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { NftDetailsClient } from "@/app/nft-details/[id]/token-client";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "NFT Details",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 
 export default async function NftDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolved = await params;
-  return <NftDetailsClient id={resolved.id} />;
+  redirect(`/nft/${encodeURIComponent(resolved.id)}`);
 }

@@ -85,7 +85,7 @@ export function Footer() {
               <div className="mt-1">Use the Contact page to send a message.</div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs font-semibold text-zinc-200">© {year}</div>
+              <div className="text-xs font-semibold text-zinc-200">(c) {year}</div>
               <div className="mt-1">All rights reserved.</div>
             </div>
           </div>

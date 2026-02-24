@@ -5,6 +5,7 @@ import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteCont
 import { parseEther, type Address } from "viem";
 import { hardhat } from "viem/chains";
 import { CONTRACT_ADDRESS, marketplaceAbi } from "@/config/contracts";
+import { formatEthLabel } from "@/lib/price";
 
 function isAddress(value: string): value is Address {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
@@ -130,7 +131,7 @@ export default function CreatePage() {
         </div>
 
         <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-          {listingFeeWei !== null ? `Listing fee: ${listingFeeWei.toString()} wei` : "Listing fee: …"}
+          {listingFeeWei !== null ? `Listing fee: ${formatEthLabel({ priceWei: listingFeeWei })}` : "Listing fee: ..."}
         </div>
       </div>
 
@@ -164,7 +165,7 @@ export default function CreatePage() {
             <span className="text-zinc-400">Transaction</span>
             <span className="break-all font-mono text-xs text-zinc-100">{txHash}</span>
             <span className="text-xs text-zinc-400">
-              {isConfirming ? "Confirming…" : isSuccess ? "Confirmed." : "Submitted."}
+              {isConfirming ? "Confirming..." : isSuccess ? "Confirmed." : "Submitted."}
             </span>
           </div>
         </div>
@@ -182,7 +183,7 @@ export default function CreatePage() {
               autoComplete="off"
             />
           </div>
-
+          
           <div>
             <label className="text-sm font-semibold text-zinc-100">Price (ETH)</label>
             <input
@@ -228,7 +229,7 @@ export default function CreatePage() {
           {isBusy ? (
             <span className="inline-flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-950/30 border-t-zinc-950" />
-              Minting…
+              Minting...
             </span>
           ) : (
             "Mint NFT"

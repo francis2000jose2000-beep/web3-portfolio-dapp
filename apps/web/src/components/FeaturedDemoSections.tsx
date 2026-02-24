@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { toast } from "sonner";
 import { NFTCard } from "@/components/NFTCard";
-import { ipfsToGatewayUrl } from "@/lib/api";
 import type { DemoMainnetNft } from "@/lib/constants/mock-nfts";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
 
@@ -35,7 +34,7 @@ export function FeaturedDemoSections({ nfts }: FeaturedDemoSectionsProps) {
           ? `Portfolio Demo: I want to place a bid of ${payload.amountEth ?? "0"} ETH on ${payload.nft.name} (${payload.nft.collection}).\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`
           : `Portfolio Demo: I want to ${payload.action.toLowerCase()} ${payload.nft.name} (${payload.nft.collection}) for ${payload.nft.priceEth} ETH.\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`;
 
-      const toastId = toast.loading("Awaiting signature…");
+      const toastId = toast.loading("Awaiting signature...");
       await signMessageAsync({ message: msg });
       toast.success("Portfolio Demo: Simulated transaction successful", { id: toastId });
     } catch (err: unknown) {
@@ -63,11 +62,12 @@ export function FeaturedDemoSections({ nfts }: FeaturedDemoSectionsProps) {
             return (
               <NFTCard
                 key={nft.id}
-                href={`/nft-details/${nft.id}`}
+                href={`/nft/${nft.id}`}
                 title={nft.name}
                 subtitle={nft.collection}
                 rightBadge="Featured"
-                mediaUrl={ipfsToGatewayUrl(nft.image)}
+                imageUrl={nft.image}
+                mediaUrl={nft.image}
                 type={nft.type}
                 isExternal={true}
                 externalUrl={nft.externalUrl}
@@ -95,11 +95,12 @@ export function FeaturedDemoSections({ nfts }: FeaturedDemoSectionsProps) {
           {featuredAuction.map((nft) => (
             <NFTCard
               key={nft.id}
-              href={`/nft-details/${nft.id}`}
+              href={`/nft/${nft.id}`}
               title={nft.name}
               subtitle={nft.collection}
               rightBadge="Auction"
-              mediaUrl={ipfsToGatewayUrl(nft.image)}
+              imageUrl={nft.image}
+              mediaUrl={nft.image}
               type={nft.type}
               isExternal={true}
               externalUrl={nft.externalUrl}
@@ -113,4 +114,3 @@ export function FeaturedDemoSections({ nfts }: FeaturedDemoSectionsProps) {
     </div>
   );
 }
-

@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, Users } from "lucide-react";
 import { useAccount } from "wagmi";
 import { EmptyState } from "@/components/EmptyState";
-import { Title } from "@/components/Title";
 import { fetchEvents, type EventApiItem } from "@/lib/api";
 
 function formatDate(value: string): string {
@@ -30,12 +29,6 @@ export default function EventsPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
-      <Title
-        eyebrow="Personal Events"
-        title="Events"
-        subtitle="Only events where your address is listed as a participant."
-      />
-
       {!isConnected ? (
         <div className="mt-10">
           <EmptyState message="Connect your wallet to view your events." />

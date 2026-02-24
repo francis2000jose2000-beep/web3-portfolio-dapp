@@ -99,8 +99,8 @@ export function UploadNftClient() {
   const isBusy = phase !== "idle" || isPending || isConfirming;
 
   const phaseLabel = useMemo(() => {
-    if (phase === "uploading") return "1/2 Uploading to IPFS…";
-    if (phase === "confirming") return "2/2 Confirming on Blockchain…";
+    if (phase === "uploading") return "1/2 Uploading to IPFS...";
+    if (phase === "confirming") return "2/2 Confirming on Blockchain...";
     return null;
   }, [phase]);
 
@@ -120,7 +120,7 @@ export function UploadNftClient() {
 
   useEffect(() => {
     if (phase === "confirming" && isSuccess) {
-      if (mintToastId !== null) toast.success("NFT Minted Successfully! 🎉", { id: mintToastId });
+      if (mintToastId !== null) toast.success("NFT minted successfully.", { id: mintToastId });
       setMintToastId(null);
       setPhase("idle");
       router.push("/explore");
@@ -209,7 +209,7 @@ export function UploadNftClient() {
 
         if (!res.ok) throw new Error(`API unreachable (${res.status})`);
       } catch {
-        throw new Error("API is offline. Start the backend on port 3000 before uploading to IPFS.");
+        throw new Error("API is offline. Start the backend on port 3001 before uploading to IPFS.");
       } finally {
         clearTimeout(timeout);
       }

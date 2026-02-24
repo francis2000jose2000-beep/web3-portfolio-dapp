@@ -13,12 +13,7 @@ export function getNodeEnv(): NodeEnv {
 }
 
 export function getPort(): number {
-  const raw = getEnvVar("PORT");
-  const port = raw ? Number(raw) : 4000;
-  if (!Number.isInteger(port) || port <= 0) {
-    throw new Error("Invalid PORT");
-  }
-  return port;
+  return 3001;
 }
 
 export function getMongoUri(): string {
@@ -34,7 +29,7 @@ export function getMongoUri(): string {
 
 export function getCorsOrigins(): string[] {
   const raw = getEnvVar("CORS_ORIGIN");
-  if (!raw) return ["http://localhost:3000"];
+  if (!raw) return ["http://localhost:3000", "http://127.0.0.1:3000"];
   return raw
     .split(",")
     .map((s) => s.trim())

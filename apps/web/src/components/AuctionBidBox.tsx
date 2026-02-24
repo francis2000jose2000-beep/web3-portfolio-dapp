@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { formatEther, parseEther, type Address } from "viem";
+import { parseEther, type Address } from "viem";
 import { toast } from "sonner";
 import { marketplaceAbi } from "@/config/contracts";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
+import { formatEthForDisplay } from "@/lib/price";
 import { useMounted } from "@/hooks/useMounted";
 
 type AuctionBidBoxProps = {
@@ -143,7 +144,8 @@ export function AuctionBidBox({ marketplaceAddress, chainId, tokenId, allowEndAu
 
     const minRequired = highestBid > ZERO ? highestBid + ONE : minBid;
     if (value < minRequired) {
-      toast.error(`Minimum bid: ${formatEther(minRequired)} ETH`);
+      const formatted = formatEthForDisplay({ priceWei: minRequired, isExternal: false });
+      toast.error(`Minimum bid: ${formatted.value}${formatted.showUnit ? " ETH" : ""}`);
       return;
     }
 
@@ -209,9 +211,14 @@ export function AuctionBidBox({ marketplaceAddress, chainId, tokenId, allowEndAu
     <div className="mt-3 rounded-2xl border border-web3-cyan/25 bg-zinc-950/30 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold text-zinc-200">
-          <span className="text-web3-cyan">Auction</span> · {timeLeft}
+          <span className="text-web3-cyan">Auction</span>: {timeLeft}
         </div>
-        <div className="text-xs text-zinc-300">Current: {formatEther(currentBid)} ETH</div>
+        <div className="text-xs text-zinc-300">
+          {(() => {
+            const formatted = formatEthForDisplay({ priceWei: currentBid, isExternal: false });
+            return `Current: ${formatted.value}${formatted.showUnit ? " ETH" : ""}`;
+          })()}
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2">

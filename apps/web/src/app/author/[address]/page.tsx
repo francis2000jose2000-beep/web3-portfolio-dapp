@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AuthorAddressPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params;
   return (
-    <Suspense fallback={<div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-zinc-200">Loading…</div>}>
+    <Suspense fallback={<div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-zinc-200">Loading...</div>}>
       <AuthorClient addressOverride={address} />
     </Suspense>
   );

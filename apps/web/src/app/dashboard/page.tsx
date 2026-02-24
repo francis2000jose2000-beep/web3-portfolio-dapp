@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
-import { formatEther, type Address } from "viem";
+import { type Address } from "viem";
 import { hardhat } from "viem/chains";
 import { NFTCard } from "@/components/NFTCard";
 import { ListForSaleButton } from "@/components/ListForSaleButton";
 import { CONTRACT_ADDRESS, marketplaceAbi } from "@/config/contracts";
+import { formatEthForDisplay } from "@/lib/price";
 
 type MarketItem = {
   itemId: bigint;
@@ -116,7 +117,7 @@ export default function DashboardPage() {
       owner: item.owner,
       sold: item.sold,
       priceWei: item.price,
-      priceEth: formatEther(item.price)
+      priceDisplay: formatEthForDisplay({ priceWei: item.price, isExternal: false })
     }));
   }, [myNfts]);
 
@@ -127,7 +128,7 @@ export default function DashboardPage() {
       seller: item.seller,
       sold: item.sold,
       priceWei: item.price,
-      priceEth: formatEther(item.price)
+      priceDisplay: formatEthForDisplay({ priceWei: item.price, isExternal: false })
     }));
   }, [myListings]);
 
@@ -213,7 +214,11 @@ export default function DashboardPage() {
               <div key={item.key} className="space-y-3">
                 <NFTCard
                   title={`Token #${item.tokenId.toString()}`}
-                  subtitle={tab === "collection" ? `Owned • ${item.priceEth} ETH` : `Listed • ${item.priceEth} ETH`}
+                  subtitle={
+                    tab === "collection"
+                      ? `Owned | ${item.priceDisplay.value}${item.priceDisplay.showUnit ? " ETH" : ""}`
+                      : `Listed | ${item.priceDisplay.value}${item.priceDisplay.showUnit ? " ETH" : ""}`
+                  }
                   rightBadge={tab === "collection" ? "Owned" : "Listed"}
                   marketplaceAddress={contractAddress}
                   chainId={chainId}
@@ -240,7 +245,7 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
             <p className="text-sm text-zinc-200">
-              {tab === "collection" ? "You don’t own any NFTs yet." : "You don’t have any active listings."}
+              {tab === "collection" ? "You don't own any NFTs yet." : "You don't have any active listings."}
             </p>
             <p className="mt-1 text-xs text-zinc-400">
               {tab === "collection" ? "Buy one from Explore." : "Mint and list one from Create."}

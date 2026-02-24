@@ -6,6 +6,7 @@ import { useReadContract, useWaitForTransactionReceipt, useWriteContract } from 
 import { toast } from "sonner";
 import { marketplaceAbi } from "@/config/contracts";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
+import { formatEthLabel } from "@/lib/price";
 import { NeonModal } from "@/components/NeonModal";
 
 type ResellModalProps = {
@@ -84,10 +85,10 @@ export function ResellModal({ open, onClose, tokenId, marketplaceAddress, chainI
       const message = getErrorMessage(err);
       setFormError(message);
       if (id !== null) {
-        if (isUserRejectedError(err)) toast.warning("Transaction Cancelled", { id });
+        if (isUserRejectedError(err)) toast.warning("Transaction cancelled.", { id });
         else toast.error(message, { id });
       } else {
-        if (isUserRejectedError(err)) toast.warning("Transaction Cancelled");
+        if (isUserRejectedError(err)) toast.warning("Transaction cancelled.");
         else toast.error(message);
       }
       setToastId(null);
@@ -103,8 +104,8 @@ export function ResellModal({ open, onClose, tokenId, marketplaceAddress, chainI
 
   useEffect(() => {
     if (!isSuccess) return;
-    if (toastId !== null) toast.success("NFT Listed for Sale! 🎉", { id: toastId });
-    else toast.success("NFT Listed for Sale! 🎉");
+    if (toastId !== null) toast.success("NFT listed for sale.", { id: toastId });
+    else toast.success("NFT listed for sale.");
     setToastId(null);
     if (typeof onListed === "function") onListed();
     onClose();
@@ -138,7 +139,7 @@ export function ResellModal({ open, onClose, tokenId, marketplaceAddress, chainI
             autoComplete="off"
           />
           <div className="mt-2 text-xs text-zinc-400">
-            Listing fee: {listingFeeWei !== null ? `${listingFeeWei.toString()} wei` : "Loading…"}
+            Listing fee: {listingFeeWei !== null ? formatEthLabel({ priceWei: listingFeeWei }) : "Loading..."}
           </div>
         </div>
 
@@ -150,7 +151,7 @@ export function ResellModal({ open, onClose, tokenId, marketplaceAddress, chainI
           disabled={!canSubmit}
           className="inline-flex w-full items-center justify-center rounded-2xl bg-web3-cyan px-5 py-3 text-sm font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isBusy ? "Listing…" : "List now"}
+          {isBusy ? "Listing..." : "List now"}
         </button>
       </div>
     </NeonModal>

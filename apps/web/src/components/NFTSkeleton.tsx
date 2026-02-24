@@ -6,7 +6,7 @@ type NFTSkeletonProps = {
 
 export function NFTSkeleton({ withButton = true }: NFTSkeletonProps) {
   return (
-    <div className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-glow">
+    <div className="group block overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-glow">
       <div className="relative aspect-square">
         <div className="h-full w-full bg-white/5">
           <div className="h-full w-full animate-pulse bg-white/10" />

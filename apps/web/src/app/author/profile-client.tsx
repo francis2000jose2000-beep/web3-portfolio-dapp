@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { hardhat } from "viem/chains";
-import { formatEther, type Address } from "viem";
+import { type Address } from "viem";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAccount } from "wagmi";
@@ -24,6 +24,8 @@ import {
   type AuthorProfile,
   type NftApiItem
 } from "@/lib/api";
+import { getNftDisplayName } from "@/lib/nft";
+import { formatEthForDisplay, tryParseWeiBigint } from "@/lib/price";
 
 function isAddress(value: string): value is Address {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
@@ -163,7 +165,7 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
                   Copy address
                 </button>
                 <div className="rounded-xl border border-white/10 bg-zinc-950/30 px-4 py-2 text-sm text-zinc-200">
-                  {isProfileLoading ? "Loading…" : "Profile"}
+                  {isProfileLoading ? "Loading..." : "Profile"}
                 </div>
               </div>
             ) : null}
@@ -197,7 +199,7 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
 
             <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
               <div className="text-xs text-zinc-500">Listed items</div>
-              <div className="mt-1 text-2xl font-semibold text-zinc-50">{author ? (items.length > 0 ? items.length : 0) : "—"}</div>
+              <div className="mt-1 text-2xl font-semibold text-zinc-50">{author ? (items.length > 0 ? items.length : 0) : "N/A"}</div>
               <div className="mt-2 text-xs text-zinc-400">From MongoDB sync</div>
             </div>
           </div>
@@ -212,10 +214,10 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
             <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
               {tab === "activity"
                 ? isActivityLoading
-                  ? "Loading…"
+                  ? "Loading..."
                   : `${activityItems.length} event(s)`
                 : isTabLoading
-                  ? "Loading…"
+                  ? "Loading..."
                   : `${items.length} item(s)`}
             </div>
           </div>
@@ -288,20 +290,25 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
               {items.map((item) => (
                 <div key={item.tokenId} className="space-y-3">
                   <NFTCard
-                    href={`/nft-details/${item.tokenId}`}
-                    title={item.name?.trim() ? item.name : `Token #${item.tokenId}`}
+                    nft={item}
+                    href={typeof item._id === "string" && item._id.trim() ? `/nft/${item._id.trim()}` : `/nft/${item.tokenId}`}
+                    title={getNftDisplayName({
+                      name: item.name,
+                      tokenId: item.tokenId,
+                      collectionName:
+                        typeof (item as unknown as { collection?: string }).collection === "string" && (item as unknown as { collection: string }).collection.trim()
+                          ? (item as unknown as { collection: string }).collection
+                          : typeof item.category === "string" && item.category.trim()
+                            ? item.category
+                            : null
+                    })}
                     subtitle={tab === "owned" ? "Owned" : tab === "created" ? "Created" : "On sale"}
-                    mediaUrl={
-                      typeof item.media === "string" && item.media.trim()
-                        ? ipfsToGatewayUrl(item.media)
-                        : typeof item.image === "string" && item.image.trim()
-                          ? ipfsToGatewayUrl(item.image)
-                          : undefined
-                    }
+                    imageUrl={typeof item.image === "string" && item.image.trim() ? item.image.trim() : undefined}
+                    mediaUrl={typeof item.media === "string" && item.media.trim() ? item.media.trim() : undefined}
                     type={item.type}
                     mediaType={item.mediaType}
                     mimeType={item.mimeType}
-                    rightBadge={item.sold ? "Sold" : "Listed"}
+                    rightBadge={item.isExternal ? "Mainnet Asset" : item.sold ? "Sold" : "Listed"}
                     marketplaceAddress={contractAddress}
                     chainId={chainId}
                     tokenId={(() => {
@@ -317,11 +324,8 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
                     })()}
                     sold={item.sold}
                     priceWei={(() => {
-                      try {
-                        return typeof item.price === "string" && item.price ? BigInt(item.price) : undefined;
-                      } catch {
-                        return undefined;
-                      }
+                      const candidate = (item as unknown as { priceWei?: string }).priceWei ?? item.price;
+                      return tryParseWeiBigint(candidate);
                     })()}
                   />
 
@@ -376,11 +380,9 @@ function formatWhen(ts: string): string {
 
 function formatEthFromWei(wei?: string): string | null {
   if (!wei) return null;
-  try {
-    return formatEther(BigInt(wei));
-  } catch {
-    return null;
-  }
+  const formatted = formatEthForDisplay({ price: wei, isExternal: false });
+  if (!formatted.showUnit) return null;
+  return formatted.value;
 }
 
 function activityLabel(item: ActivityItem): string {

@@ -227,11 +227,11 @@ export function UploadWizardPanel(props: UploadWizardPanelProps) {
                 disabled={!canSubmit}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-web3-cyan px-5 py-3 text-sm font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {phaseLabel ? phaseLabel : isBusy ? "Working…" : isSuccess ? "Minted" : "Create"}
+                {phaseLabel ? phaseLabel : isBusy ? "Working..." : isSuccess ? "Minted" : "Create"}
               </button>
               <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                 <div className="text-xs text-zinc-500">Contract</div>
-                <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-200">{contractAddress ?? "—"}</div>
+                <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-200">{contractAddress ?? "N/A"}</div>
               </div>
             </div>
             {phaseLabel ? <div className="mt-3 text-xs font-semibold text-zinc-200">{phaseLabel}</div> : null}
@@ -239,7 +239,7 @@ export function UploadWizardPanel(props: UploadWizardPanelProps) {
         ) : null}
 
         {listingFeeWei === null ? (
-          <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4 text-sm text-zinc-200">Loading listing fee…</div>
+          <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4 text-sm text-zinc-200">Loading listing fee...</div>
         ) : null}
 
         {formError ? (
@@ -262,7 +262,7 @@ export function UploadWizardPanel(props: UploadWizardPanelProps) {
           <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
             <div className="text-xs text-zinc-500">Transaction</div>
             <div className="mt-1 break-all font-mono text-xs font-semibold text-zinc-100">{txHash}</div>
-            <div className="mt-1 text-xs text-zinc-400">{isConfirming ? "Confirming…" : isSuccess ? "Confirmed" : "Submitted"}</div>
+            <div className="mt-1 text-xs text-zinc-400">{isConfirming ? "Confirming..." : isSuccess ? "Confirmed" : "Submitted"}</div>
           </div>
         ) : null}
       </div>

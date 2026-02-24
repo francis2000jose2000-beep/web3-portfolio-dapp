@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { formatEthLabel } from "@/lib/price";
 
 type CollectionProps = {
   title: string;
   subtitle?: string;
   imageUrl?: string;
   href?: string;
-  floorEth?: string;
+  floorEth?: string | number;
   items?: number;
 };
 
@@ -15,6 +16,12 @@ const FALLBACK =
 
 export function Collection({ title, subtitle, imageUrl, href = "/explore", floorEth, items }: CollectionProps) {
   const image = imageUrl && imageUrl.trim() ? imageUrl : FALLBACK;
+  const floorLabel =
+    typeof floorEth === "number"
+      ? formatEthLabel({ price: String(floorEth) })
+      : typeof floorEth === "string" && floorEth.trim()
+        ? formatEthLabel({ price: floorEth })
+        : "N/A";
   return (
     <Link
       href={href}
@@ -40,15 +47,14 @@ export function Collection({ title, subtitle, imageUrl, href = "/explore", floor
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-white/10 bg-zinc-950/30 px-3 py-2">
             <div className="text-[11px] text-zinc-500">Floor</div>
-            <div className="mt-1 text-xs font-semibold text-zinc-100">{floorEth ?? "—"} ETH</div>
+            <div className="mt-1 text-xs font-semibold text-zinc-100">{floorLabel}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-950/30 px-3 py-2">
             <div className="text-[11px] text-zinc-500">Items</div>
-            <div className="mt-1 text-xs font-semibold text-zinc-100">{items ?? "—"}</div>
+            <div className="mt-1 text-xs font-semibold text-zinc-100">{items ?? "N/A"}</div>
           </div>
         </div>
       </div>
     </Link>
   );
 }
-

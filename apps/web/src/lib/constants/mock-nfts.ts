@@ -446,15 +446,15 @@ export const DEMO_MAINNET_NFTS: DemoMainnetNft[] = [
     ]
   },
   {
-    id: "demo-doodles-1141",
-    tokenId: "1141",
-    name: "Doodles #1141",
+    id: "699dbb2e96dd23c310a69c04",
+    tokenId: "118",
+    name: "Doodle #118",
     collection: "Doodles",
-    description: "A high-demand character with a clean palette and sharp traits.",
-    image: "https://ipfs.io/ipfs/QmRN6shMmgpvAdUkra7aXCKPaiKHVrJQAvHzDvToo9nhcB",
+    description: "A joyful character with a distinct visual style from the Doodles collection.",
+    image: "https://ipfs.io/ipfs/QmPMc4tcBsMqLRuCQtPmPe84bpSjrC3Ky7t3JwuHXYB4aS/118.png",
     category: "collectibles",
-    price: "7.90",
-    priceEth: "7.90",
+    price: "1.68",
+    priceEth: "1.68",
     sold: false,
     type: "image",
     mediaType: "image",
@@ -462,29 +462,22 @@ export const DEMO_MAINNET_NFTS: DemoMainnetNft[] = [
     externalUrl: "https://opensea.io/collection/doodles-official",
     chainId: 1,
     contractAddress: "0x8a90cab2b38dba80c64b7734e58ee1db38b8992e",
-    ownerAddress: "0x2Pac000000000000000000000000000000000000",
+    ownerAddress: "0x3Pac000000000000000000000000000000000000",
     creatorAddress: "0xB1aDCE0000000000000000000000000000000000",
     activity: [
       {
-        id: "doodles1141-bid",
+        id: "doodles118-bid",
         type: "Bid",
-        from: "0xC0043D0000000000000000000000000000000000",
-        amountEth: "7.50",
-        timestamp: "2026-02-01T08:11:45.000Z"
+        from: "0xD0043D0000000000000000000000000000000000",
+        amountEth: "1.60",
+        timestamp: "2026-02-05T09:15:45.000Z"
       },
       {
-        id: "doodles1141-list",
+        id: "doodles118-list",
         type: "List",
-        from: "0x2Pac000000000000000000000000000000000000",
-        amountEth: "7.90",
-        timestamp: "2026-02-01T08:20:10.000Z"
-      },
-      {
-        id: "doodles1141-transfer",
-        type: "Transfer",
-        from: "0x2Pac000000000000000000000000000000000000",
-        to: "0x2Pac000000000000000000000000000000000000",
-        timestamp: "2026-02-01T08:22:02.000Z"
+        from: "0x3Pac000000000000000000000000000000000000",
+        amountEth: "1.68",
+        timestamp: "2026-02-05T09:30:10.000Z"
       }
     ]
   },

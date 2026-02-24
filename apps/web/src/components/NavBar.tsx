@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Menu, Search, Wallet, X } from "lucide-react";
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useAccount, useBalance, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { hardhat } from "wagmi/chains";
 import { useMounted } from "@/hooks/useMounted";
 
@@ -38,6 +38,19 @@ export function NavBar() {
   const items = useMemo(() => NAV_ITEMS, []);
 
   const { address, isConnected } = useAccount();
+  const { data: balanceData, isLoading: isBalanceLoading } = useBalance({
+    address,
+  });
+
+  const formattedBalance = useMemo(() => {
+    if (!balanceData) return null;
+    const val = parseFloat(balanceData.formatted);
+    return val.toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 4,
+    });
+  }, [balanceData]);
+
   const chainId = useChainId();
   const { connectors, connect, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
@@ -115,12 +128,24 @@ export function NavBar() {
           </Link>
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
+          {mounted && isConnected && (
+            <span className="text-sm font-semibold text-web3-cyan">
+              {isBalanceLoading || !formattedBalance
+                ? "..."
+                : `${formattedBalance} ${balanceData?.symbol ?? "ETH"}`}
+            </span>
+          )}
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 shadow-glow transition hover:bg-white/10"
             onClick={handleConnectClick}
-            disabled={!mounted || (needsHardhat ? isSwitchingChain : !isConnected && (!injectedConnector || isPending))}
+            disabled={
+              !mounted ||
+              (needsHardhat
+                ? isSwitchingChain
+                : !isConnected && (!injectedConnector || isPending))
+            }
             aria-label={isConnected ? "Disconnect wallet" : "Connect wallet"}
             title={isConnected ? "Disconnect" : "Connect"}
           >
@@ -173,6 +198,14 @@ export function NavBar() {
             >
               <Search className="h-5 w-5" />
             </Link>
+
+            {mounted && isConnected && (
+              <div className="mt-2 flex justify-center text-sm font-semibold text-web3-cyan">
+                {isBalanceLoading || !formattedBalance
+                  ? "..."
+                  : `${formattedBalance} ${balanceData?.symbol ?? "ETH"}`}
+              </div>
+            )}
 
             <button
               type="button"

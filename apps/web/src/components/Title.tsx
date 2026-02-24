@@ -5,9 +5,13 @@ type TitleProps = {
   title: string;
   subtitle?: string;
   right?: ReactNode;
+  titleAs?: "h1" | "h2" | "div";
+  hideTitle?: boolean;
 };
 
-export function Title({ eyebrow, title, subtitle, right }: TitleProps) {
+export function Title({ eyebrow, title, subtitle, right, titleAs = "h1", hideTitle = false }: TitleProps) {
+  const TitleTag = titleAs;
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
@@ -17,11 +21,12 @@ export function Title({ eyebrow, title, subtitle, right }: TitleProps) {
             {eyebrow}
           </div>
         ) : null}
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">{title}</h1>
+        {hideTitle ? null : (
+          <TitleTag className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">{title}</TitleTag>
+        )}
         {subtitle ? <p className="mt-2 text-sm text-zinc-300">{subtitle}</p> : null}
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
     </div>
   );
 }
-

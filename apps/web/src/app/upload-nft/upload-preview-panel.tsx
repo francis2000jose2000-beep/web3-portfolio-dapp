@@ -1,5 +1,7 @@
 "use client";
 
+import { formatEthLabel } from "@/lib/price";
+
 type UploadPreviewPanelProps = {
   mediaPreviewUrl: string;
   mediaFileName: string | null;
@@ -45,7 +47,7 @@ export function UploadPreviewPanel({ mediaPreviewUrl, mediaFileName, mediaType, 
         <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
           <div className="text-xs text-zinc-500">Listing fee</div>
           <div className="mt-1 text-sm font-semibold text-zinc-100">
-            {listingFeeWei !== null ? `${listingFeeWei.toString()} wei` : "…"}
+            {listingFeeWei !== null ? formatEthLabel({ priceWei: listingFeeWei }) : "Loading..."}
           </div>
         </div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">

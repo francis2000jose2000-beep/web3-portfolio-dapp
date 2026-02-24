@@ -14,10 +14,16 @@ import { getCorsOrigins } from "./config/env";
 export function createApp(options: { includeNotFound?: boolean } = {}): Express {
   const app: Express = express();
 
+  const allowedOrigins = getCorsOrigins();
+
   app.use(helmet());
   app.use(
     cors({
-      origin: "http://localhost:3001",
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error("CORS origin not allowed"));
+      },
       credentials: true
     })
   );

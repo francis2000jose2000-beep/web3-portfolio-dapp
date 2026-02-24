@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ExternalLink, Repeat2, ShoppingCart, Sparkles, Tag } from "lucide-react";
 import { hardhat } from "viem/chains";
-import { formatEther, type Address } from "viem";
+import { type Address } from "viem";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount, useReadContract, useSignMessage, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ import { CONTRACT_ADDRESS, marketplaceAbi } from "@/config/contracts";
 import { fetchNFTByTokenId, fetchTokenActivity, ipfsToGatewayUrl, swapToIpfsFallbackGateway, type ActivityItem } from "@/lib/api";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
 import { getDemoMainnetNftById, type DemoActivityItem } from "@/lib/constants/mock-nfts";
+import { getNftDisplayName } from "@/lib/nft";
+import { formatEthForDisplay } from "@/lib/price";
 
 type MarketItem = {
   itemId: bigint;
@@ -155,7 +157,10 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
         ? nftDoc.price.trim()
         : null
     : listing
-      ? `${formatEther(listing.price)} ETH`
+      ? (() => {
+          const formatted = formatEthForDisplay({ priceWei: listing.price, isExternal: false });
+          return formatted.showUnit ? `${formatted.value} ETH` : formatted.value;
+        })()
       : null;
 
   const authorAddress =
@@ -167,8 +172,23 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
           : null
       : listing?.seller) ?? owner ?? null;
 
-  const displayName = isDemo ? demo.name : nftDoc?.name?.trim() ? nftDoc.name.trim() : `Token #${id}`;
-  const displayCollection = isDemo ? demo.collection : null;
+  const displayCollection =
+    isDemo
+      ? demo.collection
+      : typeof (nftDoc as unknown as { category?: string })?.category === "string" && (nftDoc as unknown as { category: string }).category.trim()
+        ? (nftDoc as unknown as { category: string }).category.trim()
+        : typeof (nftDoc as unknown as { collection?: string })?.collection === "string" && (nftDoc as unknown as { collection: string }).collection.trim()
+          ? (nftDoc as unknown as { collection: string }).collection.trim()
+          : null;
+
+  const displayName =
+    isDemo
+      ? demo.name
+      : getNftDisplayName({
+          name: typeof (nftDoc as unknown as { name?: string })?.name === "string" ? (nftDoc as unknown as { name: string }).name : null,
+          tokenId: typeof (nftDoc as unknown as { tokenId?: string })?.tokenId === "string" ? (nftDoc as unknown as { tokenId: string }).tokenId : id,
+          collectionName: displayCollection
+        });
   const displayDescription = isDemo ? demo.description : nftDoc?.description?.trim() ? nftDoc.description.trim() : null;
   const displayImage = isDemo
     ? ipfsToGatewayUrl(demo.image)
@@ -273,7 +293,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
           ? `Portfolio Demo: I want to place a bid of ${payload.amountEth ?? "0"} ETH on ${demo.name} (${demo.collection}).\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`
           : `Portfolio Demo: I want to ${payload.action.toLowerCase()} ${demo.name} (${demo.collection}) for ${demo.priceEth} ETH.\n\nSigner: ${address ?? ""}\nTimestamp: ${new Date().toISOString()}`;
 
-      const toastId = toast.loading("Awaiting signature…");
+      const toastId = toast.loading("Awaiting signature...");
       await signMessageAsync({ message: msg });
       toast.success("Portfolio Demo: Simulated transaction successful", { id: toastId });
     } catch (err: unknown) {
@@ -480,13 +500,13 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Contract</div>
                   <div className="mt-1 truncate font-mono text-xs font-semibold text-zinc-100">
-                    {isExternal ? (isDemo ? demo.contractAddress : (nftDoc?.contractAddress ?? "—")) : (contractAddress ?? "—")}
+                    {isExternal ? (isDemo ? demo.contractAddress : (nftDoc?.contractAddress ?? "N/A")) : (contractAddress ?? "N/A")}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Owner</div>
                   <div className="mt-1 font-mono text-xs font-semibold text-zinc-100">
-                    {owner ? truncateAddress(owner) : "—"}
+                    {owner ? truncateAddress(owner) : "N/A"}
                   </div>
                 </div>
                 {displayCollection ? (
@@ -506,18 +526,18 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                   <div className="mt-1 font-mono text-xs font-semibold text-zinc-100">
                     {isExternal
                       ? isDemo
-                        ? "—"
+                        ? "N/A"
                         : typeof nftDoc?.seller === "string" && isAddress(nftDoc.seller)
                           ? truncateAddress(nftDoc.seller)
-                          : "—"
+                          : "N/A"
                       : listing
                         ? truncateAddress(listing.seller)
-                        : "—"}
+                        : "N/A"}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-zinc-950/30 px-4 py-3">
                   <div className="text-xs text-zinc-500">Price</div>
-                  <div className="mt-1 text-sm font-semibold text-web3-cyan">{priceLabel ?? "—"}</div>
+                  <div className="mt-1 text-sm font-semibold text-web3-cyan">{priceLabel ?? "N/A"}</div>
                 </div>
               </div>
             </section>
@@ -536,7 +556,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                       className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-100 outline-none"
                     />
                     <div className="mt-2 text-xs text-zinc-400">
-                      Min bid: {demo.minBid ?? "—"} ETH · Highest bid: {demo.highestBid ?? "—"} ETH
+                      Min bid: {demo.minBid ?? "N/A"} ETH | Highest bid: {demo.highestBid ?? "N/A"} ETH
                     </div>
                   </div>
                 ) : null}
@@ -579,7 +599,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                         ? "View on Mainnet"
                         : "View Only"
                       : isBusy
-                        ? "Processing…"
+                        ? "Processing..."
                         : isSuccess
                           ? "Purchased"
                           : isConnected
@@ -615,7 +635,7 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                 ? `${demo.activity.length} event(s)`
                 : Array.isArray(history)
                   ? `${history.length} event(s)`
-                  : "—"}
+                  : "N/A"}
             </div>
           </div>
 
@@ -635,9 +655,9 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                   ? demo.activity.map((it: DemoActivityItem) => (
                       <tr key={it.id} className="border-t border-white/10">
                         <td className="py-3 pr-4 font-semibold text-zinc-100">{it.type}</td>
-                        <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "—"}</td>
-                        <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "—"}</td>
-                        <td className="py-3 pr-4">{it.amountEth ? `${it.amountEth} ETH` : "—"}</td>
+                        <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "N/A"}</td>
+                        <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "N/A"}</td>
+                        <td className="py-3 pr-4">{it.amountEth ? `${it.amountEth} ETH` : "N/A"}</td>
                         <td className="py-3 text-xs text-zinc-400">{formatWhen(it.timestamp)}</td>
                       </tr>
                     ))
@@ -645,9 +665,9 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
                     ? history.map((it) => (
                         <tr key={it.eventId} className="border-t border-white/10">
                           <td className="py-3 pr-4 font-semibold text-zinc-100">{activityLabel(it)}</td>
-                          <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "—"}</td>
-                          <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "—"}</td>
-                          <td className="py-3 pr-4">{it.price ? `${it.price} ETH` : "—"}</td>
+                          <td className="py-3 pr-4 font-mono text-xs">{it.from ? truncateAddress(it.from) : "N/A"}</td>
+                          <td className="py-3 pr-4 font-mono text-xs">{it.to ? truncateAddress(it.to) : "N/A"}</td>
+                          <td className="py-3 pr-4">{it.price ? `${it.price} ETH` : "N/A"}</td>
                           <td className="py-3 text-xs text-zinc-400">{formatWhen(it.timestamp)}</td>
                         </tr>
                       ))

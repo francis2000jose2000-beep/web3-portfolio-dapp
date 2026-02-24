@@ -57,6 +57,11 @@ const nftSchema = new mongoose.Schema(
       trim: true,
       maxlength: 4096
     },
+    attributes: {
+      type: [mongoose.Schema.Types.Mixed],
+      required: false,
+      default: undefined
+    },
     image: {
       type: String,
       required: false,
@@ -106,17 +111,25 @@ const nftSchema = new mongoose.Schema(
       required: false,
       lowercase: true,
       trim: true,
-      maxlength: 64
+      maxlength: 64,
+      index: true
     },
     chainId: {
       type: Number,
-      required: false
+      required: false,
+      index: true
     },
     externalUrl: {
       type: String,
       required: false,
       trim: true,
       maxlength: 4096
+    },
+    viewCount: {
+      type: Number,
+      required: true,
+      default: 0,
+      index: true
     },
     isAuction: {
       type: Boolean,
@@ -153,7 +166,21 @@ const nftSchema = new mongoose.Schema(
 );
 
 nftSchema.index({ tokenId: 1 }, { unique: true, partialFilterExpression: { isExternal: false } });
-nftSchema.index({ tokenId: 1, owner: 1 }, { unique: true, partialFilterExpression: { isExternal: true } });
+nftSchema.index(
+  { contractAddress: 1, tokenId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isExternal: true,
+      contractAddress: { $type: "string" }
+    }
+  }
+);
+
+nftSchema.index({ createdAt: -1 });
+nftSchema.index({ chainId: 1, createdAt: -1 });
+nftSchema.index({ contractAddress: 1, createdAt: -1 });
+nftSchema.index({ isExternal: 1, viewCount: -1, updatedAt: -1 });
 
 export type NFTDocument = InferSchemaType<typeof nftSchema> & {
   _id: mongoose.Types.ObjectId;

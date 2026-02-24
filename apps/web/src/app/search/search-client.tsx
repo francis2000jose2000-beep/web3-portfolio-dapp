@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { hardhat } from "viem/chains";
-import { formatEther, type Address } from "viem";
+import { type Address } from "viem";
 import { motion } from "framer-motion";
 import { Category, type CategoryOption } from "@/components/Category";
 import { Filter } from "@/components/Filter";
@@ -14,10 +14,20 @@ import { NFTCard } from "@/components/NFTCard";
 import { NFTSkeleton } from "@/components/NFTSkeleton";
 import { Title } from "@/components/Title";
 import { CONTRACT_ADDRESS } from "@/config/contracts";
-import { fetchNFTs, ipfsToGatewayUrl, type NftApiItem } from "@/lib/api";
+import { fetchNFTs, type NftApiItem } from "@/lib/api";
+import { clampNumber, normalizeDecimalInput, PRICE_FILTER_MAX_ETH, PRICE_FILTER_MIN_ETH } from "@/lib/inputs";
+import { getNftDisplayName } from "@/lib/nft";
+import { parseEthNumber, tryParseWeiBigint } from "@/lib/price";
 
 function isAddress(value: string): value is Address {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
+function parseMaybeNumber(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return Number.NaN;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : Number.NaN;
 }
 
 function normalizeQuery(q: string): string {
@@ -72,7 +82,8 @@ export function SearchClient() {
   const qFromUrl = searchParams.get("q") ?? "";
   const [q, setQ] = useState<string>(qFromUrl);
   const [category, setCategory] = useState<string>("all");
-  const [maxPriceEth, setMaxPriceEth] = useState<string>("0.10");
+  const [minPriceEth, setMinPriceEth] = useState<string>("");
+  const [maxPriceEth, setMaxPriceEth] = useState<string>("");
   const [sort, setSort] = useState<"newest" | "oldest" | "price_asc" | "price_desc">("newest");
 
   const { data, isLoading, isError, error } = useQuery({
@@ -91,7 +102,7 @@ export function SearchClient() {
     const raw = Array.isArray(data) ? data : [];
     return raw
       .map(
-        (item): (NftApiItem & { tokenIdBig: bigint; priceWeiBig: bigint | null; sellerAddr?: Address; priceEth: string }) | null => {
+        (item): (NftApiItem & { tokenIdBig: bigint; priceWeiBig: bigint | null; sellerAddr?: Address; priceEthNumber: number | null }) | null => {
           let tokenIdBig: bigint;
           try {
             tokenIdBig = BigInt(item.tokenId);
@@ -99,18 +110,13 @@ export function SearchClient() {
             return null;
           }
 
-          let priceWeiBig: bigint | null = null;
-          if (typeof item.price === "string" && item.price.trim() !== "") {
-            try {
-              priceWeiBig = BigInt(item.price);
-            } catch {
-              priceWeiBig = null;
-            }
-          }
+          const candidate = (item as unknown as { priceWei?: string }).priceWei ?? item.price;
+          const parsed = tryParseWeiBigint(candidate);
+          const priceWeiBig: bigint | null = typeof parsed === "bigint" ? parsed : null;
 
           const sellerAddr = typeof item.seller === "string" && isAddress(item.seller) ? (item.seller as Address) : undefined;
-          const priceEth = priceWeiBig !== null ? formatEther(priceWeiBig) : "0";
-          return { ...item, tokenIdBig, priceWeiBig, sellerAddr, priceEth };
+          const priceEthNumber = parseEthNumber({ priceWei: priceWeiBig ?? undefined, price: typeof item.price === "string" ? item.price : undefined });
+          return { ...item, tokenIdBig, priceWeiBig, sellerAddr, priceEthNumber };
         }
       )
       .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -118,10 +124,28 @@ export function SearchClient() {
 
   const filtered = useMemo(() => {
     const query = normalizeQuery(qFromUrl);
-    const maxEth = Number(maxPriceEth);
+    const minEthRaw = parseMaybeNumber(minPriceEth);
+    const maxEthRaw = parseMaybeNumber(maxPriceEth);
+
+    const minEthBounded = Number.isFinite(minEthRaw) ? clampNumber(minEthRaw, PRICE_FILTER_MIN_ETH, PRICE_FILTER_MAX_ETH) : Number.NaN;
+    const maxEthBounded = Number.isFinite(maxEthRaw) ? clampNumber(maxEthRaw, PRICE_FILTER_MIN_ETH, PRICE_FILTER_MAX_ETH) : Number.NaN;
+
+    const minEth =
+      Number.isFinite(minEthBounded) && Number.isFinite(maxEthBounded) && minEthBounded > maxEthBounded
+        ? maxEthBounded
+        : minEthBounded;
+    const maxEth =
+      Number.isFinite(minEthBounded) && Number.isFinite(maxEthBounded) && minEthBounded > maxEthBounded
+        ? minEthBounded
+        : maxEthBounded;
 
     return enriched.filter((item) => {
-      const priceOk = Number(item.priceEth) <= (Number.isFinite(maxEth) ? maxEth : Number.POSITIVE_INFINITY);
+      const priceEth = typeof item.priceEthNumber === "number" ? item.priceEthNumber : Number.NaN;
+      let priceOk = true;
+      if (Number.isFinite(priceEth)) {
+        if (Number.isFinite(minEth)) priceOk = priceOk && priceEth >= minEth;
+        if (Number.isFinite(maxEth)) priceOk = priceOk && priceEth <= maxEth;
+      }
 
       const queryOk =
         query.length === 0 ||
@@ -134,7 +158,7 @@ export function SearchClient() {
       const categoryOk = category === "all" ? true : internalCategory === category;
       return priceOk && queryOk && categoryOk;
     });
-  }, [enriched, qFromUrl, maxPriceEth, category]);
+  }, [enriched, qFromUrl, minPriceEth, maxPriceEth, category]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
@@ -152,7 +176,7 @@ export function SearchClient() {
           subtitle="Find NFTs by token ID, token URI, or seller address."
           right={
             <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-              {isLoading ? "Loading…" : `${filtered.length} result(s)`}
+              {isLoading ? "Loading..." : `${filtered.length} result(s)`}
             </div>
           }
         />
@@ -164,6 +188,8 @@ export function SearchClient() {
               type="button"
               onClick={() => {
                 setQ("");
+                setMinPriceEth("");
+                setMaxPriceEth("");
                 router.push("/search");
               }}
               className="rounded-xl border border-white/10 bg-zinc-950/30 px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10"
@@ -178,7 +204,7 @@ export function SearchClient() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search by tokenId, tokenURI, or seller 0x…"
+                  placeholder="Search by tokenId, tokenURI, or seller 0x..."
                   className="h-10 w-full bg-transparent px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
                 />
                 <button
@@ -191,21 +217,29 @@ export function SearchClient() {
             </form>
 
             <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
-              <div className="text-xs font-semibold text-zinc-200">Max price</div>
-              <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
-                <span>0.01</span>
-                <span className="font-semibold text-web3-cyan">{maxPriceEth} ETH</span>
-                <span>0.10</span>
+              <div className="text-xs font-semibold text-zinc-200">Price range (ETH)</div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-400">Min</div>
+                  <input
+                    inputMode="decimal"
+                    value={minPriceEth}
+                    onChange={(e) => setMinPriceEth(normalizeDecimalInput(e.target.value))}
+                    placeholder="0.001"
+                    className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-transparent px-3 text-sm font-semibold text-zinc-100 outline-none placeholder:text-zinc-600"
+                  />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-400">Max</div>
+                  <input
+                    inputMode="decimal"
+                    value={maxPriceEth}
+                    onChange={(e) => setMaxPriceEth(normalizeDecimalInput(e.target.value))}
+                    placeholder="99999.999"
+                    className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-transparent px-3 text-sm font-semibold text-zinc-100 outline-none placeholder:text-zinc-600"
+                  />
+                </div>
               </div>
-              <input
-                type="range"
-                min={0.01}
-                max={0.1}
-                step={0.005}
-                value={Number(maxPriceEth)}
-                onChange={(e) => setMaxPriceEth(Number(e.target.value).toFixed(3))}
-                className="mt-3 w-full accent-[#22D3EE]"
-              />
             </div>
           </div>
 
@@ -220,8 +254,8 @@ export function SearchClient() {
               >
                 <option value="newest">Newest</option>
                 <option value="oldest">Oldest</option>
-                <option value="price_asc">Price: Low → High</option>
-                <option value="price_desc">Price: High → Low</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
               </select>
             </div>
           </div>
@@ -259,33 +293,44 @@ export function SearchClient() {
                   className="will-change-transform"
                 >
                   <NFTCard
-                    href={`/nft-details/${item.tokenId.toString()}`}
-                    title={item.name?.trim() ? item.name : `Token #${item.tokenId}`}
+                    nft={item}
+                    href={typeof item._id === "string" && item._id.trim() ? `/nft/${item._id.trim()}` : `/nft/${item.tokenId.toString()}`}
+                    title={getNftDisplayName({
+                      name: item.name,
+                      tokenId: item.tokenId,
+                      collectionName:
+                        typeof (item as unknown as { collection?: string }).collection === "string" && (item as unknown as { collection: string }).collection.trim()
+                          ? (item as unknown as { collection: string }).collection
+                          : typeof item.category === "string" && item.category.trim()
+                            ? item.category
+                            : null
+                    })}
                     subtitle={
-                      item.sellerAddr
-                        ? `Seller: ${item.sellerAddr.slice(0, 6)}...${item.sellerAddr.slice(-4)} • ${item.priceEth} ETH`
-                        : `${item.priceEth} ETH`
+                      item.isExternal
+                        ? typeof (item as unknown as { collection?: string }).collection === "string"
+                          ? (item as unknown as { collection: string }).collection
+                          : "Mainnet Asset"
+                        : item.sellerAddr
+                          ? `Seller: ${item.sellerAddr.slice(0, 6)}...${item.sellerAddr.slice(-4)}`
+                          : item.category
+                            ? `Category: ${item.category}`
+                            : undefined
                     }
-                    mediaUrl={
-                      typeof item.media === "string" && item.media.trim()
-                        ? ipfsToGatewayUrl(item.media)
-                        : typeof item.image === "string" && item.image.trim()
-                          ? ipfsToGatewayUrl(item.image)
-                          : undefined
-                    }
+                    imageUrl={typeof item.image === "string" && item.image.trim() ? item.image : undefined}
+                    mediaUrl={typeof item.media === "string" && item.media.trim() ? item.media : undefined}
                     type={item.type}
                     mediaType={item.mediaType}
                     mimeType={item.mimeType}
                     isExternal={item.isExternal}
                     externalUrl={item.externalUrl}
-                    rightBadge={item.sold ? "Sold" : "Listed"}
+                    rightBadge={item.isExternal ? "Mainnet Asset" : item.sold ? "Sold" : "Listed"}
                     marketplaceAddress={contractAddress}
                     chainId={chainId}
                     tokenId={item.isExternal ? undefined : item.tokenIdBig}
                     seller={item.isExternal ? undefined : item.sellerAddr}
                     sold={item.sold}
-                    priceWei={item.isExternal ? undefined : (item.priceWeiBig ?? undefined)}
-                    priceLabel={item.isExternal ? (item.priceEth ? `${item.priceEth} ETH` : undefined) : undefined}
+                    priceWei={item.priceWeiBig ?? undefined}
+                    priceLabel={typeof item.price === "string" ? item.price : undefined}
                   />
                 </motion.div>
               ))}

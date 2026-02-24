@@ -8,10 +8,19 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { marketplaceAbi } from "@/config/contracts";
 import { getErrorMessage, isUserRejectedError } from "@/lib/errors";
-import { swapToIpfsFallbackGateway } from "@/lib/api";
+import { ipfsToGatewayUrls, swapToIpfsFallbackGateway } from "@/lib/api";
+import { formatEthForDisplay, getSmartValuation } from "@/lib/price";
 import { AuctionBidBox } from "@/components/AuctionBidBox";
 
 type NFTCardProps = {
+  nft?: { 
+    priceEth?: unknown; 
+    price?: unknown; 
+    priceWei?: unknown;
+    floorPrice?: number;
+    lastSale?: number;
+    tokenId?: string;
+  };
   title: string;
   subtitle?: string;
   imageUrl?: string;
@@ -19,6 +28,7 @@ type NFTCardProps = {
   type?: "image" | "audio" | "video";
   mediaType?: "image" | "audio" | "video";
   mimeType?: string;
+  isPixelArt?: boolean;
   href?: string;
   rightBadge?: string;
   isExternal?: boolean;
@@ -36,11 +46,33 @@ type NFTCardProps = {
 };
 
 const FALLBACK_IMAGE =
-  "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='800'%20viewBox='0%200%20800%20800'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='30%25'%20cy='20%25'%20r='80%25'%3E%3Cstop%20offset='0%25'%20stop-color='%2322D3EE'%20stop-opacity='0.18'/%3E%3Cstop%20offset='55%25'%20stop-color='%23A78BFA'%20stop-opacity='0.10'/%3E%3Cstop%20offset='100%25'%20stop-color='%230A0A0B'%20stop-opacity='1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect%20width='800'%20height='800'%20fill='url(%23g)'/%3E%3Crect%20x='56'%20y='56'%20width='688'%20height='688'%20rx='48'%20fill='rgba(255,255,255,0.04)'%20stroke='rgba(255,255,255,0.10)'/%3E%3Cpath%20d='M240%20500l92-120%2080%20100%2064-84%20124%20168H240z'%20fill='rgba(255,255,255,0.12)'/%3E%3Ccircle%20cx='332'%20cy='316'%20r='44'%20fill='rgba(255,255,255,0.14)'/%3E%3C/svg%3E";
+  "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='800'%20viewBox='0%200%20800%20800'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='30%25'%20cy='20%25'%20r='85%25'%3E%3Cstop%20offset='0%25'%20stop-color='%2322D3EE'%20stop-opacity='0.22'/%3E%3Cstop%20offset='45%25'%20stop-color='%23A78BFA'%20stop-opacity='0.16'/%3E%3Cstop%20offset='100%25'%20stop-color='%2307070A'%20stop-opacity='1'/%3E%3C/radialGradient%3E%3ClinearGradient%20id='l'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0%25'%20stop-color='%2322D3EE'%20stop-opacity='0.8'/%3E%3Cstop%20offset='100%25'%20stop-color='%23A78BFA'%20stop-opacity='0.8'/%3E%3C/linearGradient%3E%3Cfilter%20id='n'%20x='-20%25'%20y='-20%25'%20width='140%25'%20height='140%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.8'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.12%200'/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width='800'%20height='800'%20fill='url(%23g)'/%3E%3Crect%20width='800'%20height='800'%20filter='url(%23n)'%20opacity='0.9'/%3E%3Crect%20x='56'%20y='56'%20width='688'%20height='688'%20rx='48'%20fill='rgba(255,255,255,0.03)'%20stroke='rgba(255,255,255,0.12)'/%3E%3Cpath%20d='M112%20224H688'%20stroke='url(%23l)'%20stroke-width='2'%20opacity='0.35'/%3E%3Cpath%20d='M112%20592H688'%20stroke='url(%23l)'%20stroke-width='2'%20opacity='0.25'/%3E%3Ctext%20x='400'%20y='412'%20text-anchor='middle'%20font-family='ui-sans-serif,system-ui,-apple-system,Segoe%20UI,Roboto'%20font-size='26'%20fill='rgba(255,255,255,0.85)'%20font-weight='700'%3ENo%20Image%20Available%3C/text%3E%3Ctext%20x='400'%20y='452'%20text-anchor='middle'%20font-family='ui-sans-serif,system-ui,-apple-system,Segoe%20UI,Roboto'%20font-size='14'%20fill='rgba(255,255,255,0.55)'%3ECheck%20back%20later%20or%20open%20details%3C/text%3E%3C/svg%3E";
+
+function getUrlCandidates(raw: string | undefined): string[] {
+  const input = typeof raw === "string" ? raw.trim() : "";
+  if (!input) return [];
+  const base = ipfsToGatewayUrls(input);
+  const set = new Set<string>(base);
+  for (const url of base) {
+    const swapped = swapToIpfsFallbackGateway(url);
+    if (swapped) set.add(swapped);
+  }
+  return Array.from(set);
+}
 
 type ToastId = string | number;
 
+function normalizePriceValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
 export function NFTCard({
+  nft,
   title,
   subtitle,
   imageUrl,
@@ -48,6 +80,7 @@ export function NFTCard({
   type,
   mediaType,
   mimeType,
+  isPixelArt,
   href,
   rightBadge,
   isExternal,
@@ -63,7 +96,7 @@ export function NFTCard({
   demoActionLabel,
   onDemoAction
 }: NFTCardProps) {
-  const resolvedUrl = useMemo(() => {
+  const rawResolvedUrl = useMemo(() => {
     const candidate = typeof mediaUrl === "string" && mediaUrl.trim() ? mediaUrl.trim() : typeof imageUrl === "string" ? imageUrl.trim() : "";
     return candidate;
   }, [mediaUrl, imageUrl]);
@@ -74,36 +107,59 @@ export function NFTCard({
     const mime = typeof mimeType === "string" ? mimeType.toLowerCase() : "";
     if (mime.startsWith("audio/")) return "audio";
     if (mime.startsWith("video/")) return "video";
-    const url = resolvedUrl.toLowerCase();
+    const url = rawResolvedUrl.toLowerCase();
     if (url.endsWith(".mp3") || url.endsWith(".wav")) return "audio";
     if (url.endsWith(".mp4") || url.endsWith(".mov")) return "video";
     return "image";
-  }, [type, mediaType, mimeType, resolvedUrl]);
+  }, [type, mediaType, mimeType, rawResolvedUrl]);
 
-  const typeBadge = useMemo(() => {
-    if (resolvedType === "audio") return { label: "Audio", className: "bg-web3-cyan/15 text-web3-cyan shadow-neon-cyan" };
-    if (resolvedType === "video") return { label: "Video", className: "bg-web3-purple/15 text-web3-purple shadow-neon-purple" };
-    return { label: "Image", className: "bg-white/10 text-zinc-100 shadow-glow" };
-  }, [resolvedType]);
+  const effectiveRawUrl = useMemo(() => {
+    if (resolvedType === "image") {
+      const raw = typeof imageUrl === "string" && imageUrl.trim() ? imageUrl.trim() : typeof mediaUrl === "string" ? mediaUrl.trim() : "";
+      return raw;
+    }
+    const raw = typeof mediaUrl === "string" && mediaUrl.trim() ? mediaUrl.trim() : typeof imageUrl === "string" ? imageUrl.trim() : "";
+    return raw;
+  }, [imageUrl, mediaUrl, resolvedType]);
+
+  const urlCandidates = useMemo(() => getUrlCandidates(effectiveRawUrl), [effectiveRawUrl]);
+  const resolvedUrl = urlCandidates[0] ?? "";
 
   const initialSrc = useMemo(() => {
     if (resolvedType !== "image") return FALLBACK_IMAGE;
-    if (typeof resolvedUrl === "string" && resolvedUrl.trim() !== "") return resolvedUrl;
-    return FALLBACK_IMAGE;
-  }, [resolvedUrl, resolvedType]);
+    return resolvedUrl.trim() ? resolvedUrl.trim() : FALLBACK_IMAGE;
+  }, [resolvedType, resolvedUrl]);
 
   const [src, setSrc] = useState<string>(initialSrc);
+  const [srcIndex, setSrcIndex] = useState<number>(0);
+
+  useEffect(() => {
+    setSrcIndex(0);
+    setSrc(initialSrc);
+  }, [initialSrc]);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState<boolean>(false);
   const [purchaseToastId, setPurchaseToastId] = useState<ToastId | null>(null);
 
   const handleImageError = (): void => {
-    setSrc((current) => {
-      const swapped = swapToIpfsFallbackGateway(current);
-      if (swapped && swapped !== current) return swapped;
-      return current === FALLBACK_IMAGE ? current : FALLBACK_IMAGE;
-    });
+    if (urlCandidates.length === 0) {
+      setSrc(FALLBACK_IMAGE);
+      return;
+    }
+    const next = srcIndex + 1;
+    if (next < urlCandidates.length) {
+      setSrcIndex(next);
+      setSrc(urlCandidates[next] ?? FALLBACK_IMAGE);
+      return;
+    }
+    setSrc(FALLBACK_IMAGE);
   };
+
+  const shouldPixelate = useMemo(() => {
+    if (isPixelArt === true) return true;
+    const hay = `${title} ${subtitle ?? ""} ${externalUrl ?? ""} ${resolvedUrl}`.toLowerCase();
+    return hay.includes("cryptopunk") || hay.includes("crypto punk") || hay.includes("punk");
+  }, [externalUrl, isPixelArt, resolvedUrl, subtitle, title]);
 
   const { address: accountAddress, isConnected } = useAccount();
   const { writeContractAsync, data: txHash, isPending, error: writeError } = useWriteContract();
@@ -190,7 +246,29 @@ export function NFTCard({
       ? "Purchased"
       : "Buy Now";
 
-  const displayPrice = typeof priceWei === "bigint" ? `${formatEther(priceWei)} ETH` : typeof priceLabel === "string" ? priceLabel : "";
+  const { displayPriceValue, showEthUnit, isEstimate, priceLabelText } = useMemo(() => {
+    const effectivePrice =
+      normalizePriceValue(nft?.priceEth) ??
+      normalizePriceValue(nft?.price) ??
+      normalizePriceValue(nft?.priceWei) ??
+      normalizePriceValue(priceLabel);
+
+    const valuationInput = {
+      price: effectivePrice,
+      priceWei: priceWei,
+      floorPrice: nft?.floorPrice,
+      lastSale: nft?.lastSale,
+      tokenId: tokenId?.toString() ?? nft?.tokenId ?? "0"
+    };
+
+    const result = getSmartValuation(valuationInput, true);
+    return { 
+      displayPriceValue: result.value, 
+      showEthUnit: true,
+      isEstimate: result.isEstimate,
+      priceLabelText: result.label
+    };
+  }, [isExternal, nft?.price, nft?.priceEth, nft?.priceWei, priceLabel, priceWei, nft?.floorPrice, nft?.lastSale, tokenId, nft?.tokenId]);
 
   const content = (
     <>
@@ -208,7 +286,14 @@ export function NFTCard({
         ) : resolvedType === "audio" && resolvedUrl ? (
           <div className="flex h-full w-full flex-col justify-end bg-zinc-950/30">
             <div className="absolute inset-0">
-              <img src={FALLBACK_IMAGE} alt="Audio cover" className="h-full w-full object-cover opacity-60" />
+              <img
+                src={typeof imageUrl === "string" && imageUrl.trim() ? (getUrlCandidates(imageUrl)[0] ?? FALLBACK_IMAGE) : FALLBACK_IMAGE}
+                alt="Audio cover"
+                className="h-full w-full object-cover opacity-60"
+                onError={(e) => {
+                  e.currentTarget.src = FALLBACK_IMAGE;
+                }}
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-zinc-950/30 to-transparent" />
             </div>
             <div className="relative p-4">
@@ -223,11 +308,12 @@ export function NFTCard({
             className="h-full w-full object-cover"
             loading="lazy"
             onError={handleImageError}
+            style={shouldPixelate ? { imageRendering: "pixelated" } : undefined}
           />
         )}
 
         {rightBadge ? (
-          <div className="absolute right-3 top-3 rounded-full border border-white/10 bg-zinc-950/70 px-3 py-1 text-xs font-semibold text-zinc-100 backdrop-blur">
+          <div className="absolute right-4 top-4 inline-flex items-center rounded-full border border-white/10 bg-zinc-950/70 px-3 py-1 text-xs font-semibold text-zinc-100 backdrop-blur">
             {rightBadge}
           </div>
         ) : null}
@@ -239,10 +325,14 @@ export function NFTCard({
         </div>
         {subtitle ? <p className="truncate text-xs text-zinc-300">{subtitle}</p> : null}
 
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="text-xs text-zinc-300">{displayPrice}</div>
+        <div className="mt-3 grid grid-cols-[1fr_auto] items-center gap-3">
+          <div className="inline-flex items-baseline gap-1 text-xs text-zinc-300 tabular-nums">
+            <span className="mr-1">{priceLabelText}:</span>
+            <span className="font-semibold text-web3-cyan">{displayPriceValue}</span>
+            {showEthUnit ? <span className="text-web3-cyan/70">ETH</span> : null}
+          </div>
 
-          {showBuyButton ? (
+          {showBuyButton && !isEstimate && (!isExternal || typeof onDemoAction === "function") ? (
             <button
               type="button"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-web3-purple px-3 py-2 text-xs font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
@@ -296,35 +386,21 @@ export function NFTCard({
       whileHover={{ y: -6 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 350, damping: 26 }}
-      className="group relative overflow-hidden rounded-2xl"
+      className="group relative overflow-hidden rounded-xl"
     >
-      <div className="relative overflow-hidden rounded-2xl glass-card shadow-glow transition-colors group-hover:bg-zinc-900/50">
+      <div className="relative overflow-hidden rounded-xl glass-card shadow-glow transition-colors group-hover:bg-zinc-900/50">
         {content}
       </div>
     </motion.div>
   );
 
-  const cardWithBadge = (
-    <div className="relative">
-      {cardInner}
-      <div
-        className={
-          "pointer-events-none absolute left-4 top-4 z-20 inline-flex items-center rounded-full border border-white/10 bg-zinc-950/40 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm " +
-          typeBadge.className
-        }
-      >
-        {typeBadge.label}
-      </div>
-    </div>
-  );
-
   if (href) {
     return (
       <Link href={href} className="block transform-gpu transition-transform duration-300 hover:scale-[1.02]">
-        {cardWithBadge}
+        {cardInner}
       </Link>
     );
   }
 
-  return <div className="block transform-gpu transition-transform duration-300 hover:scale-[1.02]">{cardWithBadge}</div>;
+  return <div className="block transform-gpu transition-transform duration-300 hover:scale-[1.02]">{cardInner}</div>;
 }

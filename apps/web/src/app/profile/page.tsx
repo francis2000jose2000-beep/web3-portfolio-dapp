@@ -7,7 +7,7 @@ import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useMounted } from "@/hooks/useMounted";
 import { NFTCard } from "@/components/NFTCard";
 import { NFTSkeleton } from "@/components/NFTSkeleton";
-import { fetchNFTs, ipfsToGatewayUrl, type NftApiItem } from "@/lib/api";
+import { fetchNFTs, type NftApiItem } from "@/lib/api";
 
 function truncateAddress(address: string): string {
   if (address.length <= 10) return address;
@@ -102,7 +102,7 @@ export default function ProfilePage() {
                 disabled={!mounted || !injectedConnector || isConnecting}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-web3-cyan px-6 py-3 text-sm font-semibold text-zinc-950 shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isConnecting ? "Connecting…" : "Connect Wallet"}
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
                 <Wallet className="h-4 w-4" />
               </button>
             </div>
@@ -134,7 +134,7 @@ export default function ProfilePage() {
             <div className="mt-6 grid gap-3">
               <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-4">
                 <div className="text-xs font-semibold text-zinc-200">Owned NFTs</div>
-                <div className="mt-1 text-sm text-zinc-100">{loading ? "—" : String(items.length)}</div>
+                <div className="mt-1 text-sm text-zinc-100">{loading ? "Loading..." : String(items.length)}</div>
               </div>
               <button
                 type="button"
@@ -182,8 +182,6 @@ export default function ProfilePage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((nft) => {
-                  const imageUrl = nft.image ? ipfsToGatewayUrl(nft.image) : undefined;
-                  const mediaUrl = nft.media ? ipfsToGatewayUrl(nft.media) : undefined;
                   const tokenId = nft.tokenId;
                   const subtitleParts: string[] = [];
                   if (nft.category) subtitleParts.push(nft.category);
@@ -193,13 +191,13 @@ export default function ProfilePage() {
                     <NFTCard
                       key={`${tokenId}-${nft.owner ?? ""}`}
                       title={nft.name}
-                      subtitle={subtitleParts.join(" • ")}
-                      imageUrl={imageUrl}
-                      mediaUrl={mediaUrl}
+                      subtitle={subtitleParts.join(" | ")}
+                      imageUrl={typeof nft.image === "string" && nft.image.trim() ? nft.image.trim() : undefined}
+                      mediaUrl={typeof nft.media === "string" && nft.media.trim() ? nft.media.trim() : undefined}
                       type={nft.type}
                       mediaType={nft.mediaType}
                       mimeType={nft.mimeType}
-                      href={`/nft-details/${encodeURIComponent(tokenId)}`}
+                      href={typeof nft._id === "string" && nft._id.trim() ? `/nft/${nft._id.trim()}` : `/nft/${encodeURIComponent(tokenId)}`}
                       rightBadge="Owned"
                       sold={true}
                     />

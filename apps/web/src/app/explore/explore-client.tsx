@@ -2,20 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { formatEther, type Address } from "viem";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { type Address } from "viem";
 import { hardhat } from "viem/chains";
-import { Category, type CategoryOption } from "@/components/Category";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
-import { Filter } from "@/components/Filter";
 import { Mounted } from "@/components/Mounted";
 import { NFTCard } from "@/components/NFTCard";
 import { NFTSkeleton } from "@/components/NFTSkeleton";
 import { Title } from "@/components/Title";
 import { CONTRACT_ADDRESS } from "@/config/contracts";
-import { DEMO_MAINNET_NFTS } from "@/lib/constants/mock-nfts";
-import { fetchNFTs, ipfsToGatewayUrl, type NftApiItem } from "@/lib/api";
+import { fetchIndexedCollections, fetchNFTsPage, refreshPrices, type IndexedCollectionApiItem, type NftApiItem } from "@/lib/api";
+import { getChainDisplayName } from "@/lib/chain";
+import { clampNumber, normalizeDecimalInput, PRICE_FILTER_MAX_ETH, PRICE_FILTER_MIN_ETH } from "@/lib/inputs";
+import { getNftDisplayName } from "@/lib/nft";
+import { tryParseWeiBigint } from "@/lib/price";
 
 function getErrorMessage(err: unknown): string {
   if (!err) return "Unknown error";
@@ -43,13 +45,25 @@ function normalizeQuery(q: string): string {
   return q.trim().toLowerCase();
 }
 
-const CATEGORIES: CategoryOption[] = [
-  { label: "All", value: "all" },
-  { label: "Art", value: "art" },
-  { label: "Collectibles", value: "collectibles" },
-  { label: "Audio", value: "audio" },
-  { label: "Video", value: "video" }
-];
+function getNftIdentity(item: NftApiItem): string {
+  const rawId = typeof (item as unknown as { _id?: unknown })._id === "string" ? (item as unknown as { _id: string })._id.trim() : "";
+  if (rawId) return `id:${rawId}`;
+
+  const contractAddress = typeof item.contractAddress === "string" ? item.contractAddress.trim().toLowerCase() : "";
+  const tokenId = typeof item.tokenId === "string" || typeof item.tokenId === "number" ? String(item.tokenId).trim() : "";
+  const chainId = typeof item.chainId === "number" && Number.isFinite(item.chainId) ? String(item.chainId) : "";
+
+  if (contractAddress && tokenId) return `token:${chainId}|${contractAddress}|${tokenId}`;
+
+  const externalUrl = typeof item.externalUrl === "string" ? item.externalUrl.trim() : "";
+  if (externalUrl) return `url:${externalUrl}`;
+
+  if (tokenId) return `token:${chainId}|${tokenId}`;
+
+  const name = typeof item.name === "string" ? item.name.trim() : "";
+  const image = typeof item.image === "string" ? item.image.trim() : "";
+  return `fallback:${chainId}|${name}|${image}`;
+}
 
 function normalizeCategory(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -66,6 +80,69 @@ function mapAlchemyCategoryToInternal(raw: unknown): "art" | "collectibles" | "a
   return "";
 }
 
+function parseMaybeNumber(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return Number.NaN;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+type ExploreSortKey = "newest" | "price_asc" | "price_desc" | "name_asc";
+type ExploreChainKey = "ethereum" | "polygon" | "";
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function normalizeChain(value: string): ExploreChainKey {
+  const v = value.trim().toLowerCase();
+  if (v === "ethereum" || v === "eth" || v === "1") return "ethereum";
+  if (v === "polygon" || v === "matic" || v === "137") return "polygon";
+  return "";
+}
+
+function normalizeSort(value: string): ExploreSortKey {
+  const v = value.trim();
+  if (v === "price_asc" || v === "price_desc" || v === "name_asc") return v;
+  return "newest";
+}
+
+function getColumnCountForViewportWidth(width: number): number {
+  if (width >= 1280) return 4;
+  if (width >= 1024) return 3;
+  if (width >= 768) return 2;
+  return 1;
+}
+
+function chainIdForKey(key: ExploreChainKey): number | null {
+  if (key === "ethereum") return 1;
+  if (key === "polygon") return 137;
+  return null;
+}
+
+function normalizeCollectionLabel(value: string): string {
+  return value.trim();
+}
+
+function filterCollectionsForChain(input: string[], indexed: IndexedCollectionApiItem[], chain: ExploreChainKey): string[] {
+  const selectedChainId = chainIdForKey(chain);
+  if (selectedChainId === null) return input;
+  const allowed = new Set(indexed.filter((c) => c.chainId === selectedChainId).map((c) => c.label));
+  return input.filter((label) => allowed.has(label));
+}
+
 export function ExploreClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,18 +152,49 @@ export function ExploreClient() {
   const contractAddress = isAddress(CONTRACT_ADDRESS) ? CONTRACT_ADDRESS : undefined;
 
   const qFromUrl = searchParams.get("q") ?? "";
+  const contractFromUrl = searchParams.get("contract") ?? "";
   const focusSearch = searchParams.get("focusSearch") === "1";
 
+  const chainFromUrl = normalizeChain(searchParams.get("chain") ?? "");
+  const collectionsParam = searchParams.get("collections") ?? "";
+  const collectionsFromUrl = useMemo(() => {
+    return splitCsv(collectionsParam).map(normalizeCollectionLabel).filter(Boolean);
+  }, [collectionsParam]);
+  const minPriceFromUrl = searchParams.get("minPrice") ?? "";
+  const maxPriceFromUrl = searchParams.get("maxPrice") ?? "";
+  const sortFromUrl = normalizeSort(searchParams.get("sort") ?? "");
+
+  const contractFilter = contractFromUrl && isAddress(contractFromUrl) ? (contractFromUrl as Address) : undefined;
+
   const [q, setQ] = useState<string>(qFromUrl);
-  const [category, setCategory] = useState<string>("all");
-  const [maxPriceEth, setMaxPriceEth] = useState<string>("0.10");
-  const [sort, setSort] = useState<"newest" | "oldest" | "price_asc" | "price_desc">("newest");
+  const [chain, setChain] = useState<ExploreChainKey>(chainFromUrl);
+  const [collections, setCollections] = useState<string[]>(collectionsFromUrl);
+  const [minPriceEth, setMinPriceEth] = useState<string>(minPriceFromUrl);
+  const [maxPriceEth, setMaxPriceEth] = useState<string>(maxPriceFromUrl);
+  const [sort, setSort] = useState<ExploreSortKey>(sortFromUrl);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setQ(qFromUrl);
   }, [qFromUrl]);
+
+  useEffect(() => {
+    setChain(chainFromUrl);
+  }, [chainFromUrl]);
+
+  useEffect(() => {
+    setCollections((prev) => (arraysEqual(prev, collectionsFromUrl) ? prev : collectionsFromUrl));
+  }, [collectionsFromUrl]);
+
+  useEffect(() => {
+    setMinPriceEth(minPriceFromUrl);
+    setMaxPriceEth(maxPriceFromUrl);
+  }, [minPriceFromUrl, maxPriceFromUrl]);
+
+  useEffect(() => {
+    setSort(sortFromUrl);
+  }, [sortFromUrl]);
 
   useEffect(() => {
     if (!focusSearch && typeof window !== "undefined" && window.location.hash !== "#search") return;
@@ -110,23 +218,134 @@ export function ExploreClient() {
     </div>
   );
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["nfts", { search: qFromUrl, category, sort }],
-    queryFn: () =>
-      fetchNFTs({
+  const buildExploreUrl = (next: {
+    q: string;
+    contract?: Address;
+    chain: ExploreChainKey;
+    collections: string[];
+    minPriceEth: string;
+    maxPriceEth: string;
+    sort: ExploreSortKey;
+    preserveFocusSearch?: boolean;
+  }): string => {
+    const qs = new URLSearchParams();
+    const qTrim = next.q.trim();
+    if (qTrim) qs.set("q", qTrim);
+    if (next.contract) qs.set("contract", next.contract);
+    if (next.chain) qs.set("chain", next.chain);
+    if (next.collections.length > 0) qs.set("collections", next.collections.join(","));
+
+    const minNorm = normalizeDecimalInput(next.minPriceEth);
+    const maxNorm = normalizeDecimalInput(next.maxPriceEth);
+
+    if (minNorm) {
+      const parsed = Number(minNorm);
+      if (Number.isFinite(parsed)) qs.set("minPrice", clampNumber(parsed, PRICE_FILTER_MIN_ETH, PRICE_FILTER_MAX_ETH).toString());
+    }
+
+    if (maxNorm) {
+      const parsed = Number(maxNorm);
+      if (Number.isFinite(parsed)) qs.set("maxPrice", clampNumber(parsed, PRICE_FILTER_MIN_ETH, PRICE_FILTER_MAX_ETH).toString());
+    }
+    if (next.sort !== "newest") qs.set("sort", next.sort);
+    if (next.preserveFocusSearch && focusSearch) qs.set("focusSearch", "1");
+
+    const base = "/explore";
+    return qs.toString() ? `${base}?${qs.toString()}` : base;
+  };
+
+  const applyFiltersToUrl = (options: { includeSearch?: boolean } = {}): void => {
+    const collectionsForUrl = filterCollectionsForChain(collections, indexedCollections, chain);
+    if (collectionsForUrl.length !== collections.length) setCollections(collectionsForUrl);
+    const url = buildExploreUrl({
+      q: options.includeSearch ? q : qFromUrl,
+      contract: contractFilter,
+      chain,
+      collections: collectionsForUrl,
+      minPriceEth,
+      maxPriceEth,
+      sort,
+      preserveFocusSearch: true
+    });
+    router.push(url);
+  };
+
+  const { data: indexedCollections = [] } = useQuery({
+    queryKey: ["indexedCollections"],
+    queryFn: fetchIndexedCollections,
+    staleTime: 60_000
+  });
+
+  const PAGE_SIZE = 40;
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: [
+      "nfts",
+      {
+        search: qFromUrl,
+        contract: contractFilter,
+        chain: chainFromUrl,
+        collections: collectionsFromUrl.join(","),
+        minPrice: minPriceFromUrl,
+        maxPrice: maxPriceFromUrl,
+        sort: sortFromUrl,
+        limit: PAGE_SIZE
+      }
+    ],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      fetchNFTsPage({
         search: qFromUrl.trim() ? qFromUrl.trim() : undefined,
-        category: category !== "all" ? category : undefined,
-        sort,
-        limit: 100
+        contract: contractFilter,
+        chain: chainFromUrl ? chainFromUrl : undefined,
+        collections: collectionsFromUrl.length > 0 ? collectionsFromUrl.join(",") : undefined,
+        minPrice: minPriceFromUrl.trim() ? minPriceFromUrl.trim() : undefined,
+        maxPrice: maxPriceFromUrl.trim() ? maxPriceFromUrl.trim() : undefined,
+        sort: sortFromUrl,
+        limit: PAGE_SIZE,
+        page: typeof pageParam === "number" ? pageParam : 1
       }),
+    getNextPageParam: (lastPage, allPages) => {
+      const seen = new Set<string>();
+      for (const page of allPages) {
+        const pageItems = Array.isArray(page.items) ? page.items : [];
+        for (const it of pageItems) {
+          seen.add(getNftIdentity(it));
+        }
+      }
+
+      const loadedUnique = seen.size;
+      const total = typeof lastPage.total === "number" && Number.isFinite(lastPage.total) ? lastPage.total : loadedUnique;
+      if (loadedUnique >= total) return undefined;
+      return allPages.length + 1;
+    },
     staleTime: 10_000
   });
 
   const enriched = useMemo(() => {
-    const apiItems = Array.isArray(data) ? data : [];
-    const raw = [...DEMO_MAINNET_NFTS, ...apiItems];
+    const seen = new Set<string>();
+    const raw: NftApiItem[] = [];
+    const pages = data?.pages ?? [];
+    for (const page of pages) {
+      const pageItems = Array.isArray(page.items) ? page.items : [];
+      for (const it of pageItems) {
+        const identity = getNftIdentity(it);
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+        raw.push(it);
+      }
+    }
     return raw
-      .map((it): (NftApiItem & { tokenIdBig: bigint; priceWeiBig: bigint | null; sellerAddr?: Address; priceEth?: string }) | null => {
+      .map((it): (NftApiItem & { tokenIdBig: bigint; priceWeiBig: bigint | null; sellerAddr?: Address }) | null => {
         let tokenIdBig: bigint;
         try {
           tokenIdBig = BigInt(it.tokenId);
@@ -134,97 +353,286 @@ export function ExploreClient() {
           return null;
         }
 
-        let priceWeiBig: bigint | null = null;
-        if (typeof it.price === "string" && it.price.trim() !== "") {
-          try {
-            priceWeiBig = BigInt(it.price);
-          } catch {
-            priceWeiBig = null;
-          }
-        }
+        const candidate = (it as unknown as { priceWei?: string }).priceWei ?? it.price;
+        const parsed = tryParseWeiBigint(candidate);
+        const priceWeiBig: bigint | null = typeof parsed === "bigint" ? parsed : null;
 
         const sellerValue = (it as unknown as { seller?: string }).seller;
         const sellerAddr = typeof sellerValue === "string" && isAddress(sellerValue) ? (sellerValue as Address) : undefined;
-        const priceEth = typeof priceWeiBig === "bigint" ? formatEther(priceWeiBig) : typeof it.price === "string" ? it.price : undefined;
-        return { ...it, tokenIdBig, priceWeiBig, sellerAddr, priceEth };
+        return { ...it, tokenIdBig, priceWeiBig, sellerAddr };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [data]);
 
-  const items = useMemo(() => {
-    const query = normalizeQuery(qFromUrl);
-    const maxEth = Number(maxPriceEth);
-    return enriched.filter((item) => {
-      const priceEth = typeof item.priceEth === "string" ? Number(item.priceEth) : Number.NaN;
-      const priceOk = !Number.isFinite(maxEth) ? true : !Number.isFinite(priceEth) ? true : priceEth <= maxEth;
+  const totalCount = useMemo(() => {
+    const pages = data?.pages ?? [];
+    for (let i = pages.length - 1; i >= 0; i -= 1) {
+      const t = pages[i]?.total;
+      if (typeof t === "number" && Number.isFinite(t)) return t;
+    }
+    const loaded = pages.reduce((sum, p) => sum + (Array.isArray(p.items) ? p.items.length : 0), 0);
+    return loaded;
+  }, [data]);
 
-      const queryOk =
-        query.length === 0 ||
-        item.tokenId.toString().includes(query) ||
-        (item.sellerAddr ? item.sellerAddr.toLowerCase().includes(query) : false) ||
-        (item.owner ? item.owner.toLowerCase().includes(query) : false) ||
-        (typeof (item as unknown as { collection?: string }).collection === "string"
-          ? (item as unknown as { collection: string }).collection.toLowerCase().includes(query)
-          : false) ||
-        (item.name ? item.name.toLowerCase().includes(query) : false) ||
-        (item.description ? item.description.toLowerCase().includes(query) : false);
+  const handleRefreshPrices = async (): Promise<void> => {
+    const id = toast.loading("Refreshing prices...");
+    try {
+      const result = await refreshPrices();
+      toast.success(`Prices refreshed (updated ${result.updated} NFTs).`, { id });
+      void refetch();
+    } catch (err: unknown) {
+      toast.error(`Failed to refresh prices: ${getErrorMessage(err)}`, { id });
+    }
+  };
 
-      const internalCategory = mapAlchemyCategoryToInternal(item.category) || normalizeCategory(item.category);
-      const categoryOk = category === "all" ? true : internalCategory === category;
+  const items = enriched;
 
-      return priceOk && queryOk && categoryOk;
-    });
-  }, [enriched, qFromUrl, maxPriceEth, category]);
+  const [columnCount, setColumnCount] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    return getColumnCountForViewportWidth(window.innerWidth);
+  });
+
+  useEffect(() => {
+    const update = (): void => {
+      setColumnCount(getColumnCountForViewportWidth(window.innerWidth));
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [gridScrollMargin, setGridScrollMargin] = useState(0);
+
+  const safeColumns = Math.max(1, columnCount);
+
+  useEffect(() => {
+    const update = (): void => {
+      const el = gridRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setGridScrollMargin(Math.max(0, Math.floor(rect.top + window.scrollY)));
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setGridScrollMargin(Math.max(0, Math.floor(rect.top + window.scrollY)));
+  }, [items.length, safeColumns, isLoading]);
+  const rowCount = Math.max(1, Math.ceil(items.length / safeColumns));
+  const rowVirtualizer = useWindowVirtualizer({
+    count: rowCount,
+    estimateSize: () => 460,
+    overscan: 6,
+    scrollMargin: gridScrollMargin
+  });
+
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [rowVirtualizer, items.length, safeColumns]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
-    const next = q.trim();
-    const base = "/explore";
-    const url = next ? `${base}?q=${encodeURIComponent(next)}` : base;
-    router.push(`${url}#search`);
+    applyFiltersToUrl({ includeSearch: true });
   };
 
   return (
     <Mounted fallback={mountedFallback}>
       <div className="mx-auto max-w-6xl">
         <Title
-          eyebrow="Discovery"
+          eyebrow="Explore"
           title="Explore"
+          titleAs="div"
+          hideTitle
           subtitle="Browse the full collection and refine your search in real time."
           right={
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-              {isLoading ? "Loading…" : `${items.length} item(s)`}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleRefreshPrices()}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
+              >
+                Refresh Prices
+              </button>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+                {isLoading
+                  ? "Loading..."
+                  : `Showing ${items.length.toLocaleString()} of ${totalCount.toLocaleString()} NFTs`}
+              </div>
             </div>
           }
         />
 
-        <div id="search" className="mt-8">
-          <Filter
-            title="Search & Filters"
-            right={
-              <button
-                type="button"
-                onClick={() => {
-                  setQ("");
-                  setCategory("all");
-                  setMaxPriceEth("0.10");
-                  setSort("newest");
-                  router.push("/explore#search");
-                }}
-                className="rounded-xl border border-white/10 bg-zinc-950/30 px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-white/10"
-              >
-                Clear
-              </button>
-            }
-          >
-            <div className="grid gap-4 lg:grid-cols-3">
-              <form onSubmit={handleSubmit} className="lg:col-span-2">
+        <div className="mt-8 flex flex-col gap-6 lg:flex-row">
+          <div className="w-full shrink-0 lg:sticky lg:top-24 lg:w-64 lg:self-start xl:w-72">
+            <div className="glass-card rounded-3xl border border-white/10 bg-white/5 p-5">
+              <div className="text-sm font-semibold text-zinc-100">Filters</div>
+
+              <div className="mt-5">
+                <div className="text-xs font-semibold text-zinc-200">Chain</div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {([
+                    { key: "ethereum" as const, label: "Ethereum" },
+                    { key: "polygon" as const, label: "Polygon" }
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        const next = chain === opt.key ? "" : opt.key;
+                        const nextCollections = filterCollectionsForChain(collections, indexedCollections, next);
+                        setChain(next);
+                        setCollections(nextCollections);
+                        router.push(
+                          buildExploreUrl({
+                            q: qFromUrl,
+                            contract: contractFilter,
+                            chain: next,
+                            collections: nextCollections,
+                            minPriceEth,
+                            maxPriceEth,
+                            sort,
+                            preserveFocusSearch: true
+                          })
+                        );
+                      }}
+                      className={
+                        chain === opt.key
+                          ? "rounded-xl bg-web3-cyan px-3 py-2 text-xs font-semibold text-zinc-950"
+                          : "rounded-xl border border-white/10 bg-zinc-950/30 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-white/10"
+                      }
+                      aria-pressed={chain === opt.key}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="text-xs font-semibold text-zinc-200">Collection</div>
+                <div className="mt-3 max-h-64 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-zinc-950/20 p-3">
+                  {(() => {
+                    const selectedChainId = chainIdForKey(chain);
+                    const visible = indexedCollections
+                      .slice()
+                      .sort((a, b) => a.label.localeCompare(b.label, "en", { sensitivity: "base" }));
+                    if (visible.length === 0) {
+                      return <div className="text-xs text-zinc-400">No indexed collections available.</div>;
+                    }
+                    return visible.map((col: IndexedCollectionApiItem) => {
+                      const disabled = selectedChainId !== null && col.chainId !== selectedChainId;
+                      const checked = collections.includes(col.label);
+                      return (
+                        <label
+                          key={col.contractAddress}
+                          className={
+                            disabled
+                              ? "flex cursor-not-allowed items-center gap-2 text-xs text-zinc-500"
+                              : "flex cursor-pointer items-center gap-2 text-xs text-zinc-200"
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? Array.from(new Set([...collections, col.label]))
+                                : collections.filter((x) => x !== col.label);
+                              setCollections(next);
+                              router.push(
+                                buildExploreUrl({
+                                  q: qFromUrl,
+                                  contract: contractFilter,
+                                  chain,
+                                  collections: next,
+                                  minPriceEth,
+                                  maxPriceEth,
+                                  sort,
+                                  preserveFocusSearch: true
+                                })
+                              );
+                            }}
+                            className="h-4 w-4 rounded border-white/20 bg-transparent"
+                          />
+                          <span className={disabled ? "line-through" : ""}>{col.label}</span>
+                        </label>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="text-xs font-semibold text-zinc-200">Price Range (ETH)</div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold text-zinc-400">Min</div>
+                    <input
+                      inputMode="decimal"
+                      value={minPriceEth}
+                      onChange={(e) => setMinPriceEth(normalizeDecimalInput(e.target.value))}
+                      placeholder="0.001"
+                      className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-transparent px-3 text-sm font-semibold text-zinc-100 outline-none placeholder:text-zinc-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold text-zinc-400">Max</div>
+                    <input
+                      inputMode="decimal"
+                      value={maxPriceEth}
+                      onChange={(e) => setMaxPriceEth(normalizeDecimalInput(e.target.value))}
+                      placeholder="99999.999"
+                      className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-transparent px-3 text-sm font-semibold text-zinc-100 outline-none placeholder:text-zinc-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => applyFiltersToUrl()}
+                  className="inline-flex h-10 flex-1 items-center justify-center rounded-xl bg-web3-cyan px-4 text-sm font-semibold text-zinc-950 transition hover:brightness-110"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQ("");
+                    setChain("");
+                    setCollections([]);
+                    setMinPriceEth("");
+                    setMaxPriceEth("");
+                    setSort("newest");
+                    router.push("/explore");
+                  }}
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-950/30 px-4 text-sm font-semibold text-zinc-200 transition hover:bg-white/10"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <form onSubmit={handleSubmit} className="w-full">
                 <div className="glass-card flex items-center gap-2 rounded-2xl p-2">
                   <input
                     ref={searchInputRef}
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search by token ID, token URI, owner, or seller 0x…"
+                    placeholder="Search by name or description..."
                     className="h-10 w-full bg-transparent px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
                   />
                   <button
@@ -236,43 +644,35 @@ export function ExploreClient() {
                 </div>
               </form>
 
-              <div className="glass-card rounded-2xl p-4">
-                <div className="text-xs font-semibold text-zinc-200">Max price</div>
-                <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
-                  <span>0.01</span>
-                  <span className="font-semibold text-web3-cyan">{maxPriceEth} ETH</span>
-                  <span>0.10</span>
-                </div>
-                <input
-                  type="range"
-                  min={0.01}
-                  max={0.1}
-                  step={0.005}
-                  value={Number(maxPriceEth)}
-                  onChange={(e) => setMaxPriceEth(Number(e.target.value).toFixed(3))}
-                  className="mt-3 w-full accent-[#22D3EE]"
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <Category options={CATEGORIES} value={category} onChange={setCategory} />
-              <div className="glass-card w-full rounded-2xl p-4 lg:w-[260px]">
-                <div className="text-xs font-semibold text-zinc-200">Sort by</div>
+              <div className="glass-card w-full rounded-2xl p-4 sm:w-[260px]">
+                <div className="text-xs font-semibold text-zinc-200">Sort By</div>
                 <select
                   value={sort}
-                  onChange={(e) => setSort(e.target.value as typeof sort)}
+                  onChange={(e) => {
+                    const next = normalizeSort(e.target.value);
+                    setSort(next);
+                    router.push(
+                      buildExploreUrl({
+                        q: qFromUrl,
+                        contract: contractFilter,
+                        chain,
+                        collections,
+                        minPriceEth,
+                        maxPriceEth,
+                        sort: next,
+                        preserveFocusSearch: true
+                      })
+                    );
+                  }}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm font-semibold text-zinc-100 outline-none"
                 >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="price_asc">Price: Low → High</option>
-                  <option value="price_desc">Price: High → Low</option>
+                  <option value="newest">Recently Indexed</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                  <option value="name_asc">Name: A-Z</option>
                 </select>
               </div>
             </div>
-          </Filter>
-        </div>
 
         {!contractAddress ? (
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-zinc-200">
@@ -281,12 +681,12 @@ export function ExploreClient() {
         ) : null}
 
         {isError ? (
-          <div className="mt-8 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-6 text-sm text-yellow-100">
-            Marketplace listings are unavailable right now. Showing demo mainnet assets instead. ({getErrorMessage(error)})
+          <div className="mt-8 rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
+            Failed to load marketplace listings. ({getErrorMessage(error)})
           </div>
         ) : null}
 
-        {isLoading && DEMO_MAINNET_NFTS.length === 0 ? (
+        {isLoading ? (
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <NFTSkeleton key={i} />
@@ -295,67 +695,112 @@ export function ExploreClient() {
         ) : null}
 
         {items.length > 0 ? (
-          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {items.map((item, idx) => (
-              <motion.div
-                key={`${item.isExternal ? "external" : "local"}-${item.tokenId}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: "easeOut", delay: idx * 0.045 }}
-                className="will-change-transform"
-              >
-                <NFTCard
-                  href={
-                    item.isExternal
-                      ? typeof (item as unknown as { id?: string }).id === "string"
-                        ? `/nft-details/${(item as unknown as { id: string }).id}`
-                        : undefined
-                      : `/nft-details/${item.tokenId}`
-                  }
-                  title={item.name?.trim() ? item.name : `Token #${item.tokenId}`}
-                  subtitle={
-                    item.isExternal
-                      ? typeof (item as unknown as { collection?: string }).collection === "string"
-                        ? (item as unknown as { collection: string }).collection
-                        : "Mainnet Asset"
-                      : item.sellerAddr
-                        ? sellerLabel(item.sellerAddr)
-                        : item.category
-                          ? `Category: ${item.category}`
-                          : undefined
-                  }
-                  rightBadge={item.isExternal ? "Mainnet" : item.sold ? "Sold" : "Listed"}
-                  mediaUrl={
-                    typeof item.media === "string" && item.media.trim()
-                      ? ipfsToGatewayUrl(item.media)
-                      : typeof item.image === "string" && item.image.trim()
-                        ? ipfsToGatewayUrl(item.image)
-                        : undefined
-                  }
-                  type={item.type}
-                  mediaType={item.mediaType}
-                  mimeType={item.mimeType}
-                  isExternal={item.isExternal}
-                  externalUrl={item.externalUrl}
-                  marketplaceAddress={contractAddress}
-                  chainId={chainId}
-                  tokenId={item.isExternal ? undefined : item.tokenIdBig}
-                  seller={item.isExternal ? undefined : item.sellerAddr}
-                  sold={item.sold}
-                  priceWei={item.isExternal ? undefined : (item.priceWeiBig ?? undefined)}
-                  priceLabel={item.isExternal ? (item.priceEth ? `${item.priceEth} ETH` : undefined) : undefined}
-                  onPurchased={() => {
-                    void refetch();
-                  }}
-                />
-              </motion.div>
-            ))}
+          <div ref={gridRef} className="mt-10">
+            <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowIndex = virtualRow.index;
+                const startIndex = rowIndex * safeColumns;
+                const rowItems = items.slice(startIndex, startIndex + safeColumns);
+                const offsetY = virtualRow.start - gridScrollMargin;
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute left-0 top-0 w-full pb-6"
+                    style={{ transform: `translateY(${offsetY}px)` }}
+                  >
+                    <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${safeColumns}, minmax(0, 1fr))` }}>
+                      {rowItems.map((item) => {
+                        const rawId = typeof item._id === "string" ? item._id.trim() : "";
+                        const reactKey = getNftIdentity(item);
+                        const chainLabel = getChainDisplayName({
+                          chainId: typeof item.chainId === "number" ? item.chainId : undefined,
+                          contractAddress: item.contractAddress,
+                          externalUrl: item.externalUrl
+                        });
+
+                        return (
+                          <div key={reactKey} className="will-change-transform">
+                            <NFTCard
+                              nft={item}
+                              href={rawId ? `/nft/${rawId}` : undefined}
+                              title={getNftDisplayName({
+                                name: item.name,
+                                tokenId: item.tokenId,
+                                collectionName:
+                                  typeof item.category === "string" && item.category.trim()
+                                    ? item.category
+                                    : typeof (item as unknown as { collection?: string }).collection === "string" && (item as unknown as { collection: string }).collection.trim()
+                                      ? (item as unknown as { collection: string }).collection
+                                      : null
+                              })}
+                              subtitle={
+                                item.sellerAddr
+                                  ? `${chainLabel}${chainLabel ? " | " : ""}${sellerLabel(item.sellerAddr)}`
+                                  : item.category
+                                    ? `${chainLabel}${chainLabel ? " | " : ""}Collection: ${item.category}`
+                                    : chainLabel || undefined
+                              }
+                              rightBadge={item.isExternal ? "Mainnet Asset" : item.sold ? "Sold" : "Listed"}
+                              imageUrl={typeof item.image === "string" && item.image.trim() ? item.image : undefined}
+                              mediaUrl={typeof item.media === "string" && item.media.trim() ? item.media : undefined}
+                              type={item.type}
+                              mediaType={item.mediaType}
+                              mimeType={item.mimeType}
+                              isPixelArt={
+                                (() => {
+                                  const collection =
+                                    typeof (item as unknown as { collection?: string }).collection === "string"
+                                      ? (item as unknown as { collection: string }).collection
+                                      : "";
+                                  const hay = `${item.name ?? ""} ${collection}`.toLowerCase();
+                                  return hay.includes("cryptopunk") || hay.includes("crypto punk") || hay.includes("punk");
+                                })()
+                              }
+                              isExternal={item.isExternal}
+                              externalUrl={item.externalUrl}
+                              marketplaceAddress={contractAddress}
+                              chainId={chainId}
+                              tokenId={item.isExternal ? undefined : item.tokenIdBig}
+                              seller={item.isExternal ? undefined : item.sellerAddr}
+                              sold={item.sold}
+                              priceWei={item.priceWeiBig ?? undefined}
+                              priceLabel={typeof item.price === "string" ? item.price : undefined}
+                              onPurchased={() => {
+                                void refetch();
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="mt-10">
-            <EmptyState message="NO ASSETS DETECTED IN THIS SECTOR." />
+            <EmptyState message="No assets match your current filters." />
           </div>
         )}
+
+        {items.length > 0 ? (
+          <div className="mt-10 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => void fetchNextPage()}
+              disabled={!hasNextPage || isFetchingNextPage}
+              className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {!hasNextPage ? "No more results" : isFetchingNextPage ? "Loading..." : "Load More"}
+            </button>
+          </div>
+        ) : null}
+          </div>
+        </div>
       </div>
     </Mounted>
   );

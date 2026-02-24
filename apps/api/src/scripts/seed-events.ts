@@ -27,19 +27,19 @@ async function seedEvents(): Promise<void> {
     {
       title: "Neo-Tokyo Art Drop",
       date: new Date(now + 86400000 * 5),
-      description: "Acesso VIP à nova coleção de avatares holográficos.",
+      description: "VIP access to the new collection of holographic avatars.",
       participants: [walletAddress, "0x1234567890123456789012345678901234567890"]
     },
     {
       title: "Underground Cyber Auction",
       date: new Date(now + 86400000 * 2),
-      description: "Leilão fechado de relíquias da Web2. Só para membros confirmados.",
+      description: "Private auction of Web2 relics. Members only.",
       participants: [walletAddress]
     },
     {
       title: "Neon Syndicate Meetup",
       date: new Date(now + 86400000 * 14),
-      description: "Encontro virtual no metaverso para discutir expansão de smart contracts.",
+      description: "Virtual metaverse meetup to discuss smart contract expansion.",
       participants: [walletAddress, "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"]
     }
   ];
@@ -54,4 +54,3 @@ seedEvents().catch((error: unknown) => {
   console.error("Seed events failed:", error);
   process.exitCode = 1;
 });
-
