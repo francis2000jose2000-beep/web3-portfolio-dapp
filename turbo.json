@@ -7,7 +7,13 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", ".next/**"],
+      "env": [
+        "ALCHEMY_API_KEY",
+        "MONGODB_URI",
+        "PINATA_API_KEY",
+        "PINATA_SECRET_KEY"
+      ]
     },
     "lint": {}
   }

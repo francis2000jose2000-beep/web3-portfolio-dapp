@@ -94,7 +94,7 @@ export function FeaturedMainnetAssets() {
           });
 
           // Helper for seller address
-          const sellerAddr = typeof item.seller === "string" && isAddress(item.seller) ? (item.seller as Address) : undefined;
+          const sellerAddr = item && 'seller' in item && typeof item.seller === "string" && isAddress(item.seller) ? (item.seller as Address) : undefined;
           
           // Helper for price
           const priceWeiBig = tryParseWeiBigint(item.priceWei ?? item.price);
