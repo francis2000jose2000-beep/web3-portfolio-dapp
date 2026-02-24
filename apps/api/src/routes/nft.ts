@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import mongoose from "mongoose";
-import { Alchemy, Network } from "alchemy-sdk";
+import { Alchemy, Network, AssetTransfersCategory } from "alchemy-sdk";
 import { formatEther, parseEther } from "viem";
 import { AppError } from "../middleware/errorHandler";
 import { uploadFileBufferToPinata, uploadJsonToPinata } from "../services/pinata";
@@ -627,8 +627,28 @@ nftRouter.get(
 
     try {
       // getTransfersForNft returns transfers for a specific NFT
-      const response = await alchemy.nft.getTransfersForNft(contractAddress, tokenId);
-      res.status(200).json(response);
+      // const response = await alchemy.nft.getTransfersForNft(contractAddress, tokenId);
+      // REPLACEMENT: Use core.getAssetTransfers and filter by tokenId
+      const response = await alchemy.core.getAssetTransfers({
+        fromBlock: "0x0",
+        contractAddresses: [contractAddress],
+        category: [AssetTransfersCategory.ERC721, AssetTransfersCategory.ERC1155],
+        excludeZeroValue: true,
+        withMetadata: true,
+        maxCount: 1000 // Limit to avoid timeout
+      });
+      
+      const targetTokenIdBig = BigInt(tokenId);
+      const transfers = response.transfers.filter(t => {
+        if (!t.tokenId) return false;
+        try {
+            return BigInt(t.tokenId) === targetTokenIdBig;
+        } catch {
+            return false;
+        }
+      });
+      
+      res.status(200).json({ transfers });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Alchemy request failed";
       throw new AppError(message, 502);

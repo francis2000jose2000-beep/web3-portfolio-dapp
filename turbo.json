@@ -12,7 +12,9 @@
         "ALCHEMY_API_KEY",
         "MONGODB_URI",
         "PINATA_API_KEY",
-        "PINATA_SECRET_KEY"
+        "PINATA_SECRET_KEY",
+        "NEXT_PUBLIC_ALCHEMY_KEY",
+        "NEXT_PUBLIC_CONTRACT_ADDRESS"
       ]
     },
     "lint": {}

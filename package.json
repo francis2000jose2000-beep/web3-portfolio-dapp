@@ -15,6 +15,7 @@
   },
   "scripts": {
     "contracts:compile": "npm --workspace packages/contracts run compile",
+    "build": "turbo run build",
     "clean": "rimraf apps/web/.next apps/api/dist",
     "dev": "npm run clean && turbo run dev",
     "contracts:test": "npm --workspace packages/contracts run test",
