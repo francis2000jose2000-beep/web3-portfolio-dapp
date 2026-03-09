@@ -258,6 +258,10 @@ export function swapToIpfsFallbackGateway(url: string): string | null {
 }
 
 export function getApiBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (typeof envUrl === "string" && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/$/, "");
+  }
   return "http://localhost:3001";
 }
 

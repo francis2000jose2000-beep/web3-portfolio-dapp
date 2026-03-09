@@ -1,4 +1,4 @@
-const BRANDS = ["NeonLabs", "CyberDAO", "PulseChain", "SynthWave", "MetaGrid"];
+const BRANDS = ["NeonLabs", "CyberDAO", "PulseChain", "SynthWave", "MetaGrid", "Vercel"];
 
 export function Brand() {
   return (
@@ -8,7 +8,7 @@ export function Brand() {
         <div className="text-xs text-zinc-400">Demo partners</div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-5">
+      <div className="mt-5 grid gap-3 sm:grid-cols-6">
         {BRANDS.map((brand, idx) => (
           <div
             key={brand}

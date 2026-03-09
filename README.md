@@ -1,5 +1,5 @@
-Professional NFT Marketplace and Mass Indexer
-This is a production-grade, full-stack NFT marketplace engineered for high performance and scale. The platform utilizes a hybrid architecture that combines on-chain transaction security with a high-performance MongoDB data layer, capable of indexing and rendering 10,500+ assets with sub-second latency.
+Professional NFT Marketplace and Mass Indexer (Deployed on Vercel)
+This is a production-grade, full-stack NFT marketplace engineered for high performance and scale, now live on Vercel. The platform utilizes a hybrid architecture that combines on-chain transaction security with a high-performance MongoDB data layer, capable of indexing and rendering 10,500+ assets with sub-second latency.
 
 Technical Stack
 Frontend

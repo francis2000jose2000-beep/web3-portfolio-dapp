@@ -1,9 +1,29 @@
+import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 import { Footer } from "@/components/Footer";
 import { NavBar } from "@/components/NavBar";
 import { ToastProvider } from "@/components/ToastProvider";
 import { Web3Provider } from "@/components/Web3Provider";
+
+export const metadata: Metadata = {
+  title: "Vercel NFT Marketplace",
+  description: "Professional NFT Marketplace hosted on Vercel",
+  openGraph: {
+    title: "Vercel NFT Marketplace",
+    description: "Professional NFT Marketplace hosted on Vercel",
+    images: [
+      {
+        url: "/vercel.svg",
+        width: 1200,
+        height: 630,
+        alt: "Vercel NFT Marketplace",
+      },
+    ],
+  },
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +39,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
           </div>
         </Web3Provider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

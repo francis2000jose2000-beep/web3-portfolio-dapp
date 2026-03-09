@@ -102,7 +102,7 @@ export async function HeroSection() {
 
         <p className="mt-4 max-w-xl text-base leading-7 text-zinc-300">
           A neon-lit NFT marketplace experience for creators and collectors. Browse listings, mint in seconds, and
-          trade directly on-chain.
+          trade directly on-chain with type-safe interactions.
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -124,16 +124,25 @@ export async function HeroSection() {
 
         <div className="mt-10 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="text-xs text-zinc-400">Network</div>
-            <div className="mt-1 text-sm font-semibold text-zinc-50">Hardhat Local</div>
+            <div className="text-xs text-zinc-400">Tech Stack</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-50">Wagmi / Viem</div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="text-xs text-zinc-400">Payments</div>
             <div className="mt-1 text-sm font-semibold text-zinc-50">ETH / MATIC</div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="text-xs text-zinc-400">Style</div>
-            <div className="mt-1 text-sm font-semibold text-zinc-50">Neon Cyberpunk</div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-zinc-400">Protocol</div>
+              <a
+                href="/SECURITY_REVIEW.md"
+                target="_blank"
+                className="text-[10px] font-medium text-web3-cyan hover:underline"
+              >
+                View Audit
+              </a>
+            </div>
+            <div className="mt-1 text-sm font-semibold text-zinc-50">Wagmi / Viem</div>
           </div>
         </div>
       </div>

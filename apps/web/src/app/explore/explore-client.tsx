@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { type Address } from "viem";
+import { useChainId } from "wagmi";
 import { hardhat } from "viem/chains";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -146,6 +147,7 @@ function filterCollectionsForChain(input: string[], indexed: IndexedCollectionAp
 export function ExploreClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const activeChainId = useChainId();
 
   const chainIdRaw = process.env.NEXT_PUBLIC_CHAIN_ID ?? "";
   const chainId = chainIdRaw ? Number(chainIdRaw) : hardhat.id;
@@ -205,6 +207,30 @@ export function ExploreClient() {
       el.scrollIntoView({ block: "center", behavior: "smooth" });
     });
   }, [focusSearch, qFromUrl]);
+
+  // Sync filter with Wagmi chainId if no chain filter is set
+  useEffect(() => {
+    if (chainFromUrl) return;
+    if (!activeChainId) return;
+
+    let target: ExploreChainKey = "";
+    if (activeChainId === 137) target = "polygon";
+    else if (activeChainId === 1) target = "ethereum";
+
+    if (target) {
+      const url = buildExploreUrl({
+        q: qFromUrl,
+        contract: contractFilter,
+        chain: target,
+        collections: collectionsFromUrl,
+        minPriceEth: minPriceFromUrl,
+        maxPriceEth: maxPriceFromUrl,
+        sort: sortFromUrl,
+        preserveFocusSearch: true
+      });
+      router.replace(url);
+    }
+  }, [chainFromUrl, activeChainId, qFromUrl, contractFilter, collectionsFromUrl, minPriceFromUrl, maxPriceFromUrl, sortFromUrl, router]);
 
   const mountedFallback = (
     <div className="mx-auto max-w-6xl">
@@ -799,6 +825,12 @@ export function ExploreClient() {
             </button>
           </div>
         ) : null}
+        
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg border border-white/10 bg-black/80 p-3 text-xs text-white backdrop-blur-md">
+          <div className="font-semibold text-web3-cyan">Debug Mode</div>
+          <div>Active Chain ID: <span className="font-mono">{activeChainId ?? "None"}</span></div>
+          <div>Filter: <span className="font-mono">{chainFromUrl || "All"}</span></div>
+        </div>
           </div>
         </div>
       </div>

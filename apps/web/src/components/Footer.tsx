@@ -13,7 +13,7 @@ export function Footer() {
             NFT Marketplace
           </div>
           <p className="mt-3 text-sm leading-7 text-zinc-400">
-            Cyberpunk-native marketplace UI with on-chain actions and synced activity.
+            Cyberpunk-native marketplace UI with on-chain actions and synced activity. Deployed on Vercel.
           </p>
           <div className="mt-4 flex items-center gap-3">
             <a

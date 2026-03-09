@@ -21,7 +21,7 @@ const CARDS = [
   },
   {
     title: "Built for iteration",
-    body: "Each feature is shipped in phases with a focus on demoability, UI polish, and maintainable code."
+    body: "Each feature is shipped in phases with a focus on demoability, UI polish, and maintainable code. Hosted on Vercel for instant deployments."
   }
 ] as const;
 

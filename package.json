@@ -1,5 +1,6 @@
 {
   "name": "nft-marketplace",
+  "description": "Professional NFT Marketplace hosted on Vercel",
   "private": true,
   "packageManager": "npm@11.6.2",
   "engines": {

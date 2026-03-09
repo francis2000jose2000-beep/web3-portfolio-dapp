@@ -29,9 +29,27 @@ export function getMongoUri(): string {
 
 export function getCorsOrigins(): string[] {
   const raw = getEnvVar("CORS_ORIGIN");
-  if (!raw) return ["http://localhost:3000", "http://127.0.0.1:3000"];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const defaults = ["http://localhost:3000", "http://127.0.0.1:3000"];
+  
+  // Add Vercel URL if available
+  const vercelUrl = getEnvVar("VERCEL_URL");
+  if (vercelUrl) {
+    defaults.push(`https://${vercelUrl}`);
+  }
+
+  // Add Production URL if available
+  const prodUrl = getEnvVar("NEXT_PUBLIC_APP_URL");
+  if (prodUrl) {
+    defaults.push(prodUrl);
+  }
+
+  if (!raw) return defaults;
+  
+  return [
+    ...defaults,
+    ...raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+  ];
 }
