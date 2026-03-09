@@ -1,0 +1,64 @@
+name: Security Audit
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch: {}
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/contracts
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: ./
+        run: npm ci
+
+      - name: Compile Contracts
+        run: npx hardhat compile
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        id: slither
+        with:
+          target: 'packages/contracts'
+          slither-config: 'packages/contracts/slither.config.json'
+          fail-on: high
+          ignore-compile: true # We compiled in previous step
+          node-version: '20'
+
+      - name: Run Aderyn
+        uses: cyfrin/aderyn-action@v1.2.0
+        with:
+          project-root: 'packages/contracts'
+          output: report.md
+
+      - name: Run Security Tests
+        run: npx hardhat test test/security/Invariant.test.ts
+
+      - name: Upload Aderyn Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aderyn-report
+          path: report.md

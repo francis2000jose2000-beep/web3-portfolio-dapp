@@ -1,0 +1,1 @@
+ci: implement automated security audit pipeline (Slither & Aderyn)

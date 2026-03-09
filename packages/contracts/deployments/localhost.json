@@ -1,0 +1,8 @@
+{
+  "network": "localhost",
+  "chainId": 31337,
+  "deployedAt": "2026-03-09T15:02:13.066Z",
+  "contracts": {
+    "NFTMarketplace": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+  }
+}
