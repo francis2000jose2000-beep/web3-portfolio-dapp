@@ -264,7 +264,20 @@ export async function indexExternalNfts(params: {
   const getAlchemy = (network: Network): Alchemy => {
     const cached = alchemyByNetwork.get(network);
     if (cached) return cached;
-    const instance = new Alchemy({ apiKey, network });
+
+    let key = apiKey;
+    if (network === Network.MATIC_MAINNET || network === Network.MATIC_MUMBAI) {
+      if (process.env.POLYGON_ALCHEMY_KEY) key = process.env.POLYGON_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_POLYGON) key = process.env.ALCHEMY_API_KEY_POLYGON.trim();
+    } else if (network === Network.OPT_MAINNET || network === Network.OPT_GOERLI) {
+      if (process.env.OPTIMISM_ALCHEMY_KEY) key = process.env.OPTIMISM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_OPTIMISM) key = process.env.ALCHEMY_API_KEY_OPTIMISM.trim();
+    } else if (network === Network.ARB_MAINNET || network === Network.ARB_GOERLI) {
+      if (process.env.ARBITRUM_ALCHEMY_KEY) key = process.env.ARBITRUM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_ARBITRUM) key = process.env.ALCHEMY_API_KEY_ARBITRUM.trim();
+    }
+
+    const instance = new Alchemy({ apiKey: key, network });
     alchemyByNetwork.set(network, instance);
     return instance;
   };

@@ -2,21 +2,50 @@ import mongoose from "mongoose";
 import { getMongoUri } from "./env";
 import { NFTModel } from "../models/NFTModel";
 
-export async function connectToDatabase(): Promise<void> {
+/**
+ * Global is used here to maintain a cached connection across hot reloads
+ * in development and serverless environments.
+ */
+let cached = (global as any).mongoose;
+
+if (!cached) {
+  cached = (global as any).mongoose = { conn: null, promise: null };
+}
+
+export async function connectToDatabase(): Promise<typeof mongoose> {
   const mongoUri = getMongoUri();
 
-  if (mongoose.connection.readyState === 1) return;
-
-  await mongoose.connect(mongoUri, {
-    autoIndex: true
-  });
-
-  try {
-    await NFTModel.syncIndexes();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`Failed to sync MongoDB indexes: ${message}`);
+  if (cached.conn) {
+    return cached.conn;
   }
 
-  console.log("MongoDB connected");
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      connectTimeoutMS: 10000, // 10s timeout
+      autoIndex: true,
+    };
+
+    cached.promise = mongoose.connect(mongoUri, opts).then(async (mongoose) => {
+      console.log("Successfully connected to MongoDB Atlas");
+      
+      try {
+        await NFTModel.syncIndexes();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error(`Failed to sync MongoDB indexes: ${message}`);
+      }
+      
+      return mongoose;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
 }

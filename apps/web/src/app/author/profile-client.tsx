@@ -69,7 +69,8 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
     queryKey: ["author", author ?? ""],
     queryFn: () => fetchAuthorProfile(author ?? ""),
     enabled: Boolean(author),
-    staleTime: 30_000
+    staleTime: 30_000,
+    refetchOnWindowFocus: false
   });
 
   const fetchForTab = (key: TabKey, address: string): Promise<NftApiItem[]> => {
@@ -83,7 +84,8 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
     queryKey: ["author-nfts", author ?? "", tab],
     queryFn: () => fetchForTab(tab, author as string),
     enabled: Boolean(author),
-    staleTime: 10_000
+    staleTime: 10_000,
+    refetchOnWindowFocus: false
   });
 
   const {
@@ -95,7 +97,8 @@ export function AuthorClient({ addressOverride }: AuthorClientProps) {
     queryKey: ["author-activity", author ?? ""],
     queryFn: () => fetchActivity(author as string, { limit: 200 }),
     enabled: Boolean(author) && tab === "activity",
-    staleTime: 5_000
+    staleTime: 5_000,
+    refetchOnWindowFocus: false
   });
 
   const items = useMemo(() => {

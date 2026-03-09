@@ -97,7 +97,8 @@ export function NftPageClient({ id }: NftPageClientProps) {
       throw new Error("Invalid NFT id");
     },
     enabled: !isDemo,
-    staleTime: 15_000
+    staleTime: 15_000,
+    refetchOnWindowFocus: false
   });
 
   const viewMongoId = typeof nftDoc?._id === "string" ? nftDoc._id.trim() : "";
@@ -269,9 +270,10 @@ export function NftPageClient({ id }: NftPageClientProps) {
 
   // History Query
   const { data: historyData, isLoading: isHistoryLoading } = useQuery({
-    queryKey: ["nft-history", resolved.contractAddress, resolved.tokenId],
-    queryFn: () => fetchNftHistory(resolved.contractAddress!, resolved.tokenId),
-    enabled: !!resolved.contractAddress && !!resolved.tokenId && /^\d+$/.test(resolved.tokenId)
+    queryKey: ["nft-history", resolved.contractAddress, resolved.tokenId, resolved.chainId],
+    queryFn: () => fetchNftHistory(resolved.contractAddress!, resolved.tokenId, { chain: resolved.chainId }),
+    enabled: !!resolved.contractAddress && !!resolved.tokenId && /^\d+$/.test(resolved.tokenId),
+    refetchOnWindowFocus: false
   });
 
   // Purchase Flow

@@ -292,11 +292,18 @@ export async function fetchNFTsPage(params: FetchNftsParams = {}): Promise<Fetch
     page: typeof params.page === "number" ? String(params.page) : undefined
   });
 
+  const headers: Record<string, string> = {
+    Accept: "application/json"
+  };
+
+  if (params.chain) {
+    const chainId = params.chain === "ethereum" ? "1" : params.chain === "polygon" ? "137" : "";
+    if (chainId) headers["x-chain-id"] = chainId;
+  }
+
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Accept: "application/json"
-    }
+    headers
   });
 
   if (!res.ok) {
@@ -334,11 +341,14 @@ export async function fetchIndexedCollections(): Promise<IndexedCollectionApiIte
   return json.items;
 }
 
-export async function fetchCollectionMetadata(contractAddress: string): Promise<CollectionMetadataApiItem> {
+export async function fetchCollectionMetadata(contractAddress: string, params: { chain?: string | number } = {}): Promise<CollectionMetadataApiItem> {
   const address = typeof contractAddress === "string" ? contractAddress.trim() : "";
   if (!address) throw new Error("Missing contract address");
 
-  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/metadata`);
+  const query: Record<string, string | number | undefined> = {};
+  if (params.chain) query.chain = params.chain;
+
+  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/metadata`, query);
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -354,14 +364,19 @@ export async function fetchCollectionMetadata(contractAddress: string): Promise<
   return (await res.json()) as CollectionMetadataApiItem;
 }
 
-export async function fetchCollectionNfts(contractAddress: string, params: { limit?: number } = {}): Promise<CollectionNftsApiItem> {
+export async function fetchCollectionNfts(contractAddress: string, params: { limit?: number; chain?: string | number } = {}): Promise<CollectionNftsApiItem> {
   const address = typeof contractAddress === "string" ? contractAddress.trim() : "";
   if (!address) throw new Error("Missing contract address");
 
   const limit = typeof params.limit === "number" && Number.isFinite(params.limit) ? params.limit : undefined;
-  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/nfts`, {
-    limit: typeof limit === "number" ? String(limit) : undefined
-  });
+  const chain = params.chain;
+
+  const query: Record<string, string | number | undefined> = {
+    limit: typeof limit === "number" ? String(limit) : undefined,
+    chain: chain
+  };
+
+  const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/nfts`, query);
 
   const res = await fetch(url, {
     method: "GET",
@@ -378,10 +393,11 @@ export async function fetchCollectionNfts(contractAddress: string, params: { lim
   return (await res.json()) as CollectionNftsApiItem;
 }
 
-export async function fetchNftHistory(contractAddress: string, tokenId: string): Promise<any> {
+export async function fetchNftHistory(contractAddress: string, tokenId: string, params: { chain?: string | number } = {}): Promise<any> {
   const url = buildApiUrl("/api/nfts/history", {
     contractAddress,
-    tokenId
+    tokenId,
+    chain: params.chain
   });
 
   const res = await fetch(url, {

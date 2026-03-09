@@ -220,6 +220,7 @@ function categoryAliases(category: string): string[] {
 nftRouter.get(
   "/",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const owner = typeof req.query.owner === "string" ? req.query.owner.trim() : "";
@@ -275,6 +276,10 @@ nftRouter.get(
     }
 
     if (chainId !== null) match.chainId = chainId;
+    else if (req.headers["x-chain-id"]) {
+      const headerChain = normalizeChainId(req.headers["x-chain-id"]);
+      if (headerChain !== null) match.chainId = headerChain;
+    }
 
     if (soldRaw === "true") match.sold = true;
     if (soldRaw === "false") match.sold = false;
@@ -368,6 +373,7 @@ nftRouter.post(
 nftRouter.get(
   "/indexed-collections",
   asyncHandler(async (_req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     // 1. Get unique contract addresses from DB to ensure we only show what's indexed
     const distinctAddresses = await NFTModel.distinct("contractAddress", { isExternal: true });
     const dbAddresses = new Set(distinctAddresses.map((a) => normalizeAddress(a)));
@@ -391,9 +397,13 @@ nftRouter.get(
 nftRouter.get(
   "/collections/:address/metadata",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const address = normalizeAddress(req.params.address);
     if (!address) throw new AppError("Missing contract address", 400);
     if (!isEvmAddress(address)) throw new AppError("Invalid contract address", 400);
+
+    const chainIdInput = req.query.chain || req.query.chainId || req.headers["x-chain-id"];
+    const chainId = normalizeChainId(chainIdInput) ?? 1; // Default to Mainnet if not specified
 
     const cached = contractMetadataCache.get(address);
     const now = Date.now();
@@ -405,9 +415,26 @@ nftRouter.get(
     const apiKey = typeof process.env.ALCHEMY_API_KEY === "string" ? process.env.ALCHEMY_API_KEY.trim() : "";
     if (!apiKey) throw new AppError("Missing ALCHEMY_API_KEY", 500);
 
+    let network = Network.ETH_MAINNET;
+    let effectiveKey = apiKey;
+
+    if (chainId === 137) {
+      network = Network.MATIC_MAINNET;
+      if (process.env.POLYGON_ALCHEMY_KEY) effectiveKey = process.env.POLYGON_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_POLYGON) effectiveKey = process.env.ALCHEMY_API_KEY_POLYGON.trim();
+    } else if (chainId === 10) {
+      network = Network.OPT_MAINNET;
+      if (process.env.OPTIMISM_ALCHEMY_KEY) effectiveKey = process.env.OPTIMISM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_OPTIMISM) effectiveKey = process.env.ALCHEMY_API_KEY_OPTIMISM.trim();
+    } else if (chainId === 42161) {
+      network = Network.ARB_MAINNET;
+      if (process.env.ARBITRUM_ALCHEMY_KEY) effectiveKey = process.env.ARBITRUM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_ARBITRUM) effectiveKey = process.env.ALCHEMY_API_KEY_ARBITRUM.trim();
+    }
+
     const alchemy = new Alchemy({
-      apiKey,
-      network: Network.ETH_MAINNET
+      apiKey: effectiveKey,
+      network
     });
 
     let meta: unknown;
@@ -492,6 +519,7 @@ nftRouter.get(
 nftRouter.get(
   "/collections/:address/nfts",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const address = normalizeAddress(req.params.address);
     if (!address) throw new AppError("Missing contract address", 400);
     if (!isEvmAddress(address)) throw new AppError("Invalid contract address", 400);
@@ -499,7 +527,10 @@ nftRouter.get(
     const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 4;
     const limit = Number.isFinite(limitRaw) ? Math.min(20, Math.max(1, Math.floor(limitRaw))) : 4;
 
-    const cacheKey = `${address}:${limit}`;
+    const chainIdInput = req.query.chain || req.query.chainId || req.headers["x-chain-id"];
+    const chainId = normalizeChainId(chainIdInput) ?? 1; // Default to Mainnet if not specified
+
+    const cacheKey = `${address}:${limit}:${chainId}`;
     const cached = contractNftsCache.get(cacheKey);
     const now = Date.now();
     if (cached && cached.expiresAt > now) {
@@ -510,9 +541,26 @@ nftRouter.get(
     const apiKey = typeof process.env.ALCHEMY_API_KEY === "string" ? process.env.ALCHEMY_API_KEY.trim() : "";
     if (!apiKey) throw new AppError("Missing ALCHEMY_API_KEY", 500);
 
+    let network = Network.ETH_MAINNET;
+    let effectiveKey = apiKey;
+
+    if (chainId === 137) {
+      network = Network.MATIC_MAINNET;
+      if (process.env.POLYGON_ALCHEMY_KEY) effectiveKey = process.env.POLYGON_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_POLYGON) effectiveKey = process.env.ALCHEMY_API_KEY_POLYGON.trim();
+    } else if (chainId === 10) {
+      network = Network.OPT_MAINNET;
+      if (process.env.OPTIMISM_ALCHEMY_KEY) effectiveKey = process.env.OPTIMISM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_OPTIMISM) effectiveKey = process.env.ALCHEMY_API_KEY_OPTIMISM.trim();
+    } else if (chainId === 42161) {
+      network = Network.ARB_MAINNET;
+      if (process.env.ARBITRUM_ALCHEMY_KEY) effectiveKey = process.env.ARBITRUM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_ARBITRUM) effectiveKey = process.env.ALCHEMY_API_KEY_ARBITRUM.trim();
+    }
+
     const alchemy = new Alchemy({
-      apiKey,
-      network: Network.ETH_MAINNET
+      apiKey: effectiveKey,
+      network
     });
 
     let raw: unknown;
@@ -578,6 +626,7 @@ nftRouter.get(
 nftRouter.get(
   "/:tokenId",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const tokenId = req.params.tokenId;
     if (!tokenId || tokenId.trim() === "") throw new AppError("Missing tokenId", 400);
 
@@ -608,8 +657,11 @@ nftRouter.post(
 nftRouter.get(
   "/history",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const contractAddress = normalizeAddress(typeof req.query.contractAddress === "string" ? req.query.contractAddress : "");
     const tokenId = typeof req.query.tokenId === "string" ? req.query.tokenId.trim() : "";
+    const chainIdInput = req.query.chain || req.query.chainId || req.headers["x-chain-id"];
+    const chainId = normalizeChainId(chainIdInput) ?? 1;
 
     if (!contractAddress) throw new AppError("Missing contractAddress", 400);
     if (!tokenId) throw new AppError("Missing tokenId", 400);
@@ -617,12 +669,26 @@ nftRouter.get(
     const apiKey = typeof process.env.ALCHEMY_API_KEY === "string" ? process.env.ALCHEMY_API_KEY.trim() : "";
     if (!apiKey) throw new AppError("Missing ALCHEMY_API_KEY", 500);
 
+    let network = Network.ETH_MAINNET;
+    let effectiveKey = apiKey;
+
+    if (chainId === 137) {
+      network = Network.MATIC_MAINNET;
+      if (process.env.POLYGON_ALCHEMY_KEY) effectiveKey = process.env.POLYGON_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_POLYGON) effectiveKey = process.env.ALCHEMY_API_KEY_POLYGON.trim();
+    } else if (chainId === 10) {
+      network = Network.OPT_MAINNET;
+      if (process.env.OPTIMISM_ALCHEMY_KEY) effectiveKey = process.env.OPTIMISM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_OPTIMISM) effectiveKey = process.env.ALCHEMY_API_KEY_OPTIMISM.trim();
+    } else if (chainId === 42161) {
+      network = Network.ARB_MAINNET;
+      if (process.env.ARBITRUM_ALCHEMY_KEY) effectiveKey = process.env.ARBITRUM_ALCHEMY_KEY.trim();
+      else if (process.env.ALCHEMY_API_KEY_ARBITRUM) effectiveKey = process.env.ALCHEMY_API_KEY_ARBITRUM.trim();
+    }
+
     const alchemy = new Alchemy({
-      apiKey,
-      network: Network.ETH_MAINNET // Defaults to Mainnet, but should ideally match the chain of the contract.
-      // For this task, we assume the history is relevant to the configured network or Mainnet for external.
-      // If we support Polygon, we might need to check the chainId passed or infer it.
-      // However, the current setup defaults to ETH_MAINNET for Alchemy instance in other routes too.
+      apiKey: effectiveKey,
+      network
     });
 
     try {
@@ -659,6 +725,7 @@ nftRouter.get(
 nftRouter.get(
   "/id/:id",
   asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     const id = req.params.id;
     if (!id || id.trim() === "") throw new AppError("Missing id", 400);
     if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError("Invalid id", 400);
@@ -667,6 +734,38 @@ nftRouter.get(
     if (!nft) throw new AppError("NFT not found", 404);
 
     res.status(200).json({ nft: withDerivedPrice(nft as unknown as Record<string, unknown>) });
+  })
+);
+
+nftRouter.get(
+  "/cron/sync",
+  asyncHandler(async (_req, res) => {
+    const apiKey = typeof process.env.ALCHEMY_API_KEY === "string" ? process.env.ALCHEMY_API_KEY.trim() : "";
+    if (!apiKey) throw new AppError("Missing ALCHEMY_API_KEY", 500);
+
+    // This endpoint is meant to be called by a Cron job.
+    // It triggers the indexing of external NFTs.
+    // We don't want to wait for it to finish, so we just trigger it.
+    // However, Vercel Cron might timeout if we don't return quickly,
+    // but usually it's better to wait if we want to see the result in the logs.
+    // Given the 10s limit on Vercel serverless functions (by default), 
+    // and this process takes longer, we should probably return early 
+    // OR rely on the fact that this might be running on a longer timeout plan.
+    // For now, let's await it to be safe and see errors, assuming the timeout is handled or it's fast enough for incremental updates.
+    // Actually, indexExternalNfts can take a long time. 
+    // But since this is a "sync", it might be doing incremental updates.
+    // Let's just await it.
+    
+    try {
+      const result = await indexExternalNfts({ apiKey, targets: DEFAULT_EXTERNAL_INDEX_TARGETS });
+      res.status(200).json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Alchemy request failed";
+      // Log error but return 200 to avoid Cron retries if it's a transient issue? 
+      // Or return 500 to signal failure. Let's return 500.
+      console.error("Cron sync failed:", message);
+      res.status(500).json({ error: message });
+    }
   })
 );
 

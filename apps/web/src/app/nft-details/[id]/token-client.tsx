@@ -98,7 +98,8 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
     queryKey: ["nft", id],
     queryFn: () => fetchNFTByTokenId(id),
     enabled: !isDemo && tokenId !== null,
-    staleTime: 15_000
+    staleTime: 15_000,
+    refetchOnWindowFocus: false
   });
 
   const isExternal = isDemo ? true : nftDoc?.isExternal === true;
@@ -107,7 +108,8 @@ export function NftDetailsClient({ id }: NftDetailsClientProps) {
     queryKey: ["activity", { tokenId: id }],
     queryFn: () => fetchTokenActivity(id, { limit: 50 }),
     enabled: !isDemo && tokenId !== null,
-    staleTime: 5_000
+    staleTime: 5_000,
+    refetchOnWindowFocus: false
   });
 
   const { data: ownerData } = useReadContract({

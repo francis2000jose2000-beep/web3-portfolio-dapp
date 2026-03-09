@@ -8,6 +8,7 @@ import { type Address } from "viem";
 import { useChainId } from "wagmi";
 import { hardhat } from "viem/chains";
 import { toast } from "sonner";
+import { RefreshCcw, Layers, Zap, Database } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { Mounted } from "@/components/Mounted";
 import { NFTCard } from "@/components/NFTCard";
@@ -299,7 +300,8 @@ export function ExploreClient() {
   const { data: indexedCollections = [] } = useQuery({
     queryKey: ["indexedCollections"],
     queryFn: fetchIndexedCollections,
-    staleTime: 60_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
   });
 
   const PAGE_SIZE = 40;
@@ -354,7 +356,8 @@ export function ExploreClient() {
       if (loadedUnique >= total) return undefined;
       return allPages.length + 1;
     },
-    staleTime: 10_000
+    staleTime: 10_000,
+    refetchOnWindowFocus: false
   });
 
   const enriched = useMemo(() => {
@@ -469,6 +472,22 @@ export function ExploreClient() {
     applyFiltersToUrl({ includeSearch: true });
   };
 
+  const currentNetwork = useMemo(() => {
+    if (chain === "ethereum") return { name: "Ethereum Mainnet", icon: <Zap className="h-4 w-4" />, color: "bg-blue-500", border: "border-blue-500/30", text: "text-blue-400" };
+    if (chain === "polygon") return { name: "Polygon PoS", icon: <Layers className="h-4 w-4" />, color: "bg-purple-500", border: "border-purple-500/30", text: "text-purple-400" };
+    
+    if (activeChainId === 1) return { name: "Ethereum Mainnet", icon: <Zap className="h-4 w-4" />, color: "bg-blue-500", border: "border-blue-500/30", text: "text-blue-400" };
+    if (activeChainId === 137) return { name: "Polygon PoS", icon: <Layers className="h-4 w-4" />, color: "bg-purple-500", border: "border-purple-500/30", text: "text-purple-400" };
+    
+    return { name: "All Networks", icon: <Database className="h-4 w-4" />, color: "bg-zinc-500", border: "border-zinc-500/20", text: "text-zinc-400" };
+  }, [chain, activeChainId]);
+
+  const handleRefreshData = async () => {
+    const id = toast.loading("Syncing with blockchain...");
+    await refetch();
+    toast.success("Data synced successfully.", { id });
+  };
+
   return (
     <Mounted fallback={mountedFallback}>
       <div className="mx-auto max-w-6xl">
@@ -480,14 +499,27 @@ export function ExploreClient() {
           subtitle="Browse the full collection and refine your search in real time."
           right={
             <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-2 rounded-xl border ${currentNetwork.border} bg-white/5 px-3 py-2 text-xs font-semibold ${currentNetwork.text} uppercase tracking-wider`}>
+                {currentNetwork.icon}
+                <span>{currentNetwork.name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRefreshData()}
+                className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
+                title="Force refresh data from API"
+              >
+                <RefreshCcw className={`h-4 w-4 transition-transform group-hover:rotate-180 ${isFetchingNextPage || isLoading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Sync</span>
+              </button>
               <button
                 type="button"
                 onClick={() => void handleRefreshPrices()}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
+                className="hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-white/10 sm:block"
               >
                 Refresh Prices
               </button>
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+              <div className="hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200 lg:block">
                 {isLoading
                   ? "Loading..."
                   : `Showing ${items.length.toLocaleString()} of ${totalCount.toLocaleString()} NFTs`}
@@ -809,7 +841,9 @@ export function ExploreClient() {
           </div>
         ) : (
           <div className="mt-10">
-            <EmptyState message="No assets match your current filters." />
+            <EmptyState 
+              message={chain ? `Indexing in Progress for ${currentNetwork.name}...` : "No assets match your current filters."} 
+            />
           </div>
         )}
 

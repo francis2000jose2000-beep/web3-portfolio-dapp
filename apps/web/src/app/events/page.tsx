@@ -22,7 +22,8 @@ export default function EventsPage() {
     queryKey: ["events", { participant }],
     queryFn: () => fetchEvents(participant, { limit: 100 }),
     enabled: isConnected && Boolean(participant),
-    staleTime: 5_000
+    staleTime: 5_000,
+    refetchOnWindowFocus: false
   });
 
   const items = useMemo(() => (Array.isArray(data) ? (data as EventApiItem[]) : []), [data]);

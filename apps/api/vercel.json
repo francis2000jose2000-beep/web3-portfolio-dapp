@@ -1,16 +1,10 @@
 {
-  "version": 2,
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ],
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npm run build",
   "crons": [
     {
-      "path": "/api/nfts/index/external",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/nfts/prices/refresh",
-      "schedule": "*/5 * * * *"
+      "path": "/api/nfts/cron/sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

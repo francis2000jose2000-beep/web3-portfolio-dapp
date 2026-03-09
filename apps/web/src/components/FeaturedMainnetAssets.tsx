@@ -40,6 +40,7 @@ export function FeaturedMainnetAssets() {
       sort: "price_desc"
     }),
     staleTime: 60000,
+    refetchOnWindowFocus: false
   });
 
   // Use API data if available, otherwise fallback to demo data

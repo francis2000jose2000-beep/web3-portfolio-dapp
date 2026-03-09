@@ -95,7 +95,8 @@ export function SearchClient() {
         sort,
         limit: 100
       }),
-    staleTime: 10_000
+    staleTime: 10_000,
+    refetchOnWindowFocus: false
   });
 
   const enriched = useMemo(() => {
