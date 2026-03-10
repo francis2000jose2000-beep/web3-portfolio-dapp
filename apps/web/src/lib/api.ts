@@ -163,3 +163,19 @@ export function ipfsToGatewayUrl(url: string): string {
   }
   return url;
 }
+
+export const ipfsToGatewayUrls = (ipfsUrl: string | undefined): string[] => {
+  if (!ipfsUrl) return [];
+  if (ipfsUrl.startsWith('ipfs://')) {
+    return [ipfsUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')];
+  }
+  return [ipfsUrl];
+};
+
+export function swapToIpfsFallbackGateway(url: string | undefined): string | null {
+  if (!url) return null;
+  if (url.includes("ipfs.io/ipfs/")) {
+    return url.replace("ipfs.io/ipfs/", "dweb.link/ipfs/");
+  }
+  return null;
+}
