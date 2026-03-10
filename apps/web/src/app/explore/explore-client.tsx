@@ -329,7 +329,7 @@ export function ExploreClient() {
         limit: PAGE_SIZE
       }
     ],
-    initialPageParam: 1,
+    initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       fetchNFTsPage({
         search: qFromUrl.trim() ? qFromUrl.trim() : undefined,
@@ -340,21 +340,10 @@ export function ExploreClient() {
         maxPrice: maxPriceFromUrl.trim() ? maxPriceFromUrl.trim() : undefined,
         sort: sortFromUrl,
         limit: PAGE_SIZE,
-        page: typeof pageParam === "number" ? pageParam : 1
+        page: pageParam
       }),
-    getNextPageParam: (lastPage, allPages) => {
-      const seen = new Set<string>();
-      for (const page of allPages) {
-        const pageItems = Array.isArray(page.items) ? page.items : [];
-        for (const it of pageItems) {
-          seen.add(getNftIdentity(it));
-        }
-      }
-
-      const loadedUnique = seen.size;
-      const total = typeof lastPage.total === "number" && Number.isFinite(lastPage.total) ? lastPage.total : loadedUnique;
-      if (loadedUnique >= total) return undefined;
-      return allPages.length + 1;
+    getNextPageParam: (lastPage) => {
+      return lastPage.nextPageKey ?? undefined;
     },
     staleTime: 10_000,
     refetchOnWindowFocus: false
