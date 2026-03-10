@@ -279,7 +279,7 @@ export function swapToIpfsFallbackGateway(url: string): string | null {
 export function getApiBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (typeof envUrl === "string" && envUrl.trim().length > 0) {
-    let url = envUrl.trim().replace(/\/$/, "");
+    let url = envUrl.trim().replace(/\/+$/, "");
     // Ensure the URL uses HTTPS if not on localhost
     if (!url.startsWith("http://localhost") && url.startsWith("http://")) {
       url = url.replace("http://", "https://");

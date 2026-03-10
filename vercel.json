@@ -1,4 +1,16 @@
 {
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/apps/api/api/index.ts"
+    }
+  ],
+  "functions": {
+    "apps/api/api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
 }

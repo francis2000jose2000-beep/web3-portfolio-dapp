@@ -19,7 +19,7 @@ export function createApp(options: { includeNotFound?: boolean } = {}): Express 
   app.use(helmet());
   app.use(
     cors({
-      origin: "*", // For debugging, then narrow to your Vercel URL
+      origin: allowedOrigins,
       allowedHeaders: ["Content-Type", "Authorization", "x-chain-id"]
     })
   );
