@@ -10,11 +10,13 @@ import { eventsRouter } from "./routes/events";
 import { notFoundHandler } from "./middleware/notFound";
 import { errorHandler } from "./middleware/errorHandler";
 import { getCorsOrigins } from "./config/env";
+import { connectToDatabase } from "./config/db";
 
 export function createApp(options: { includeNotFound?: boolean } = {}): Express {
   const app: Express = express();
 
   const allowedOrigins = getCorsOrigins();
+  allowedOrigins.push("https://web3-portfolio-dapp.vercel.app");
 
   app.use(helmet());
   app.use(
@@ -23,6 +25,17 @@ export function createApp(options: { includeNotFound?: boolean } = {}): Express 
       allowedHeaders: ["Content-Type", "Authorization", "x-chain-id"]
     })
   );
+
+  // Database Connection Middleware
+  app.use(async (_req, _res, next) => {
+    try {
+      await connectToDatabase();
+      next();
+    } catch (err) {
+      console.error("Database connection failed in middleware:", err);
+      next(err);
+    }
+  });
 
   // Network Access Log
   app.use((req, _res, next) => {
