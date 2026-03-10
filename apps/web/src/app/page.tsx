@@ -5,6 +5,9 @@ import { FeaturedMainnetAssets } from "@/components/FeaturedMainnetAssets";
 import { Service } from "@/components/Service";
 import { DEMO_MAINNET_NFTS } from "@/lib/constants/mock-nfts";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function Home() {
   return (
     <div className="mx-auto max-w-6xl space-y-16">

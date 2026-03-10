@@ -1,7 +1,8 @@
-"use client";
-
 import { Suspense } from "react";
 import { ExploreClient } from "@/app/explore/explore-client";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default function ExplorePage() {
   return (

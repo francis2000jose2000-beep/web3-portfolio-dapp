@@ -123,6 +123,25 @@ export type ActivityItem = {
   timestamp: string;
 };
 
+async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number } = {}): Promise<Response> {
+  const { timeout = 10000, ...rest } = options;
+
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(resource, {
+      ...rest,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 function buildApiUrl(path: string, query: Record<string, string | number | boolean | undefined> = {}): string {
   const base = getApiBaseUrl();
   const searchParams = new URLSearchParams();
@@ -141,7 +160,7 @@ export async function fetchEvents(participant: string, params: { limit?: number 
     limit: params.limit
   });
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -150,7 +169,7 @@ export async function fetchEvents(participant: string, params: { limit?: number 
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { items?: EventApiItem[] };
@@ -260,7 +279,12 @@ export function swapToIpfsFallbackGateway(url: string): string | null {
 export function getApiBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.trim().replace(/\/$/, "");
+    let url = envUrl.trim().replace(/\/$/, "");
+    // Ensure the URL uses HTTPS if not on localhost
+    if (!url.startsWith("http://localhost") && url.startsWith("http://")) {
+      url = url.replace("http://", "https://");
+    }
+    return url;
   }
   return "http://localhost:3001";
 }
@@ -272,6 +296,10 @@ async function readErrorText(res: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function createApiError(message: string, res: Response): Error {
+  return new Error(`${message || "Failed to fetch"}: ${res.status} ${res.statusText}`);
 }
 
 export async function fetchNFTsPage(params: FetchNftsParams = {}): Promise<FetchNftsPageResult> {
@@ -301,14 +329,14 @@ export async function fetchNFTsPage(params: FetchNftsParams = {}): Promise<Fetch
     if (chainId) headers["x-chain-id"] = chainId;
   }
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers
   });
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { items?: NftApiItem[]; total?: number };
@@ -333,7 +361,7 @@ export async function fetchIndexedCollections(): Promise<IndexedCollectionApiIte
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { items?: IndexedCollectionApiItem[] };
@@ -349,7 +377,7 @@ export async function fetchCollectionMetadata(contractAddress: string, params: {
   if (params.chain) query.chain = params.chain;
 
   const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/metadata`, query);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -358,7 +386,7 @@ export async function fetchCollectionMetadata(contractAddress: string, params: {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   return (await res.json()) as CollectionMetadataApiItem;
@@ -378,7 +406,7 @@ export async function fetchCollectionNfts(contractAddress: string, params: { lim
 
   const url = buildApiUrl(`/api/nfts/collections/${encodeURIComponent(address)}/nfts`, query);
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -387,7 +415,7 @@ export async function fetchCollectionNfts(contractAddress: string, params: { lim
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   return (await res.json()) as CollectionNftsApiItem;
@@ -400,7 +428,7 @@ export async function fetchNftHistory(contractAddress: string, tokenId: string, 
     chain: params.chain
   });
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -409,7 +437,7 @@ export async function fetchNftHistory(contractAddress: string, tokenId: string, 
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   return await res.json();
@@ -417,7 +445,7 @@ export async function fetchNftHistory(contractAddress: string, tokenId: string, 
 
 export async function fetchNFTByTokenId(tokenId: string): Promise<NftApiItem> {
   const url = buildApiUrl(`/api/nfts/${encodeURIComponent(tokenId)}`);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -426,7 +454,7 @@ export async function fetchNFTByTokenId(tokenId: string): Promise<NftApiItem> {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { nft?: NftApiItem };
@@ -445,7 +473,7 @@ export async function fetchNFTById(id: string): Promise<NftApiItem> {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { nft?: NftApiItem };
@@ -455,7 +483,7 @@ export async function fetchNFTById(id: string): Promise<NftApiItem> {
 
 export async function trackNftViewById(id: string): Promise<void> {
   const url = buildApiUrl(`/api/nfts/view/id/${encodeURIComponent(id)}`);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Accept: "application/json"
@@ -464,13 +492,13 @@ export async function trackNftViewById(id: string): Promise<void> {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 }
 
 export async function trackNftViewByTokenId(tokenId: string): Promise<void> {
   const url = buildApiUrl(`/api/nfts/view/token/${encodeURIComponent(tokenId)}`);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Accept: "application/json"
@@ -479,13 +507,13 @@ export async function trackNftViewByTokenId(tokenId: string): Promise<void> {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 }
 
 export async function refreshPrices(): Promise<RefreshPricesResult> {
   const url = buildApiUrl("/api/nfts/prices/refresh");
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Accept: "application/json"
@@ -494,7 +522,7 @@ export async function refreshPrices(): Promise<RefreshPricesResult> {
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   return (await res.json()) as RefreshPricesResult;
@@ -502,7 +530,7 @@ export async function refreshPrices(): Promise<RefreshPricesResult> {
 
 export async function fetchAuthorProfile(address: string): Promise<AuthorProfile> {
   const url = buildApiUrl(`/api/authors/${encodeURIComponent(address)}`);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -511,7 +539,7 @@ export async function fetchAuthorProfile(address: string): Promise<AuthorProfile
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { author?: AuthorProfile };
@@ -524,7 +552,7 @@ export async function fetchActivity(address: string, params: { limit?: number } 
     limit: params.limit
   });
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -533,7 +561,7 @@ export async function fetchActivity(address: string, params: { limit?: number } 
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { items?: ActivityItem[] };
@@ -545,7 +573,7 @@ export async function fetchTokenActivity(tokenId: string, params: { limit?: numb
     limit: params.limit
   });
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "application/json"
@@ -554,7 +582,7 @@ export async function fetchTokenActivity(tokenId: string, params: { limit?: numb
 
   if (!res.ok) {
     const message = await readErrorText(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as { items?: ActivityItem[] };
@@ -573,7 +601,7 @@ async function readApiMessage(res: Response): Promise<string> {
 
 export async function postContactMessage(input: ContactMessageInput): Promise<ContactMessageResponse> {
   const url = buildApiUrl("/api/contact");
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -584,7 +612,7 @@ export async function postContactMessage(input: ContactMessageInput): Promise<Co
 
   if (!res.ok) {
     const message = await readApiMessage(res);
-    throw new Error(message || `API error (${res.status})`);
+    throw createApiError(message, res);
   }
 
   const json = (await res.json()) as unknown as ContactMessageResponse;

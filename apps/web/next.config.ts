@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import * as path from "node:path";
 
 const nextConfig: NextConfig = {
+  staticPageGenerationTimeout: 300,
   outputFileTracingRoot: path.join(__dirname, "..", ".."),
   webpack: (config) => {
     config.resolve = config.resolve ?? {};

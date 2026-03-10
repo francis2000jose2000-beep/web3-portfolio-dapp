@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Plus, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { getApiBaseUrl, ipfsToGatewayUrl, type CollectionMetadataApiItem, type CollectionNftsApiItem, type NftApiItem } from "@/lib/api";
 import { formatEthCompactLabel, formatEthLabel } from "@/lib/price";
 import { FeaturedDropGrid } from "@/components/FeaturedDropGrid";
@@ -14,7 +17,7 @@ function formatItems(value: string | null | undefined): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(asNumber);
 }
 
-async function getFeaturedCollectionMetadata(): Promise<CollectionMetadataApiItem | null> {
+async function fetchFeaturedCollectionMetadata(): Promise<CollectionMetadataApiItem | null> {
   const base = getApiBaseUrl();
   const url = `${base}/api/nfts/collections/${encodeURIComponent(FEATURED_COLLECTION_ADDRESS)}/metadata`;
   try {
@@ -22,8 +25,7 @@ async function getFeaturedCollectionMetadata(): Promise<CollectionMetadataApiIte
       method: "GET",
       headers: {
         Accept: "application/json"
-      },
-      next: { revalidate: 60 }
+      }
     });
     if (!res.ok) return null;
     return (await res.json()) as CollectionMetadataApiItem;
@@ -32,7 +34,7 @@ async function getFeaturedCollectionMetadata(): Promise<CollectionMetadataApiIte
   }
 }
 
-async function getFeaturedCollectionNfts(): Promise<CollectionNftsApiItem | null> {
+async function fetchFeaturedCollectionNfts(): Promise<CollectionNftsApiItem | null> {
   const base = getApiBaseUrl();
   const url = `${base}/api/nfts/collections/${encodeURIComponent(FEATURED_COLLECTION_ADDRESS)}/nfts?limit=4`;
   try {
@@ -40,8 +42,7 @@ async function getFeaturedCollectionNfts(): Promise<CollectionNftsApiItem | null
       method: "GET",
       headers: {
         Accept: "application/json"
-      },
-      next: { revalidate: 60 }
+      }
     });
     if (!res.ok) return null;
     return (await res.json()) as CollectionNftsApiItem;
@@ -50,7 +51,7 @@ async function getFeaturedCollectionNfts(): Promise<CollectionNftsApiItem | null
   }
 }
 
-async function getFeaturedCollectionHeroImage(): Promise<string | null> {
+async function fetchFeaturedCollectionHeroImage(): Promise<string | null> {
   const base = getApiBaseUrl();
   const url = `${base}/api/nfts?collections=${encodeURIComponent("CloneX")}&chain=ethereum&sort=newest&limit=1`;
   try {
@@ -58,8 +59,7 @@ async function getFeaturedCollectionHeroImage(): Promise<string | null> {
       method: "GET",
       headers: {
         Accept: "application/json"
-      },
-      next: { revalidate: 60 }
+      }
     });
     if (!res.ok) return null;
     const json = (await res.json()) as unknown as { items?: NftApiItem[] };
@@ -76,16 +76,58 @@ async function getFeaturedCollectionHeroImage(): Promise<string | null> {
   }
 }
 
-export async function HeroSection() {
-  const featured = await getFeaturedCollectionMetadata();
+export function HeroSection() {
+  const { data: featured, isLoading: isLoadingMetadata } = useQuery({
+    queryKey: ["featured-collection-metadata"],
+    queryFn: fetchFeaturedCollectionMetadata,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
+  });
+
+  const { data: featuredNfts, isLoading: isLoadingNfts } = useQuery({
+    queryKey: ["featured-collection-nfts"],
+    queryFn: fetchFeaturedCollectionNfts,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
+  });
+
+  const { data: heroImage, isLoading: isLoadingHeroImage } = useQuery({
+    queryKey: ["featured-collection-hero-image"],
+    queryFn: fetchFeaturedCollectionHeroImage,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
+  });
+
+  const isLoading = isLoadingMetadata || isLoadingNfts || isLoadingHeroImage;
+
   const collectionName = featured?.name ?? "CloneX";
   const floorLabel = formatEthLabel({ price: typeof featured?.floorPriceEth === "number" ? String(featured.floorPriceEth) : undefined });
   const volumeLabel = formatEthCompactLabel(featured?.volumeEth);
   const itemsLabel = formatItems(featured?.totalSupply);
-  const featuredNfts = await getFeaturedCollectionNfts();
-  const heroImage = await getFeaturedCollectionHeroImage();
   const rawCards = featuredNfts?.items ?? [];
   const nftCards = heroImage ? rawCards.map((it) => ({ ...it, image: it.image ?? heroImage })) : rawCards;
+
+  if (isLoading) {
+    return (
+      <section className="grid items-center gap-10 md:grid-cols-2">
+        <div className="space-y-6">
+           <div className="h-8 w-48 rounded-full bg-white/5 animate-pulse" />
+           <div className="h-32 rounded-3xl bg-white/5 animate-pulse" />
+           <div className="h-20 rounded-xl bg-white/5 animate-pulse" />
+           <div className="flex gap-4">
+              <div className="h-12 w-32 rounded-xl bg-white/5 animate-pulse" />
+              <div className="h-12 w-32 rounded-xl bg-white/5 animate-pulse" />
+           </div>
+           <div className="grid grid-cols-3 gap-3">
+              <div className="h-24 rounded-2xl bg-white/5 animate-pulse" />
+              <div className="h-24 rounded-2xl bg-white/5 animate-pulse" />
+              <div className="h-24 rounded-2xl bg-white/5 animate-pulse" />
+           </div>
+        </div>
+        <div className="h-[500px] rounded-3xl bg-white/5 animate-pulse" />
+      </section>
+    );
+  }
 
   return (
     <section className="grid items-center gap-10 md:grid-cols-2">

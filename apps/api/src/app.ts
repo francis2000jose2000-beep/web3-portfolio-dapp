@@ -19,14 +19,18 @@ export function createApp(options: { includeNotFound?: boolean } = {}): Express 
   app.use(helmet());
   app.use(
     cors({
-      origin: (origin, cb) => {
-        if (!origin) return cb(null, true);
-        if (allowedOrigins.includes(origin)) return cb(null, true);
-        return cb(new Error("CORS origin not allowed"));
-      },
-      credentials: true
+      origin: "*", // For debugging, then narrow to your Vercel URL
+      allowedHeaders: ["Content-Type", "Authorization", "x-chain-id"]
     })
   );
+
+  // Network Access Log
+  app.use((req, _res, next) => {
+    const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    const chainId = req.headers["x-chain-id"] || "N/A";
+    console.log(`[Request] ${req.method} ${req.url} | IP: ${ip} | Chain: ${chainId}`);
+    next();
+  });
 
   app.use(express.json({ limit: "1mb" }));
 
